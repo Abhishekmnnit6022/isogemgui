@@ -1,0 +1,283 @@
+CAGD SUITE - PROJECT DOCUMENTATION
+
+================================================================================
+1. SUMMARY OF WHAT MOVED AND WHAT WAS CREATED
+================================================================================
+
+What was created:
+- core/: A pure-math Python package that handles all mathematical evaluations without GUI or plotting code.
+  * core/bezier.py
+  * core/bspline.py
+  * core/knots.py
+  * core/validation.py
+  * core/io_json.py
+  * core/__init__.py
+- ui/: A PyQt5 user interface package with tab widgets embedding Matplotlib plots.
+  * ui/bezier_tab.py
+  * ui/surface_tab.py
+  * ui/bspline_tab.py
+  * ui/__init__.py
+- app.py: The main unified desktop application with tabs, menus, and status bar.
+- main.py: Clean application launcher that starts app.py.
+- tests/: Full pytest test suite with 20 passing unit tests.
+  * tests/test_bezier.py
+  * tests/test_bspline.py
+  * tests/test_knots.py
+  * tests/test_io.py
+- examples/: Sample JSON files for curves and surfaces.
+  * examples/cubic_bezier_2d.json
+  * examples/cubic_bezier_3d.json
+  * examples/bicubic_surface.json
+  * examples/bspline_deg2.json
+  * examples/bspline_clamped_deg3.json
+- requirements.txt: Python package dependencies.
+- README.md: Project guide and instructions.
+
+What moved:
+- All previous scattered scripts from "B-Spline Curve/", "Bezier Curve/", and "Bezier Surface/", as well as the old launcher, were moved into the "archive/" folder so no previous work was lost.
+- The "Matlab/" folder was kept completely untouched.
+
+
+================================================================================
+2. FILE-BY-FILE BREAKDOWN AND FUNCTION DESCRIPTIONS
+================================================================================
+
+CORE PACKAGE (core/)
+
+File: core/bezier.py
+Description:
+Pure math functions for Bernstein polynomials, arbitrary degree 2D and 3D Bezier curves, and 3D tensor-product Bezier surfaces.
+Functions:
+- bernstein(i, n, u):
+  Calculates the value of the i-th Bernstein basis polynomial of degree n for an array of parameter values u in [0, 1].
+- bezier_curve(control_points, n_eval=200):
+  Takes an array of control points (2D or 3D) and returns points along the Bezier curve evaluated at n_eval parameter steps.
+- bezier_surface(net, u_eval=30, v_eval=30):
+  Takes a 3D control net grid of shape (rows, cols, 3) and computes the X, Y, and Z matrices of the evaluated 3D surface.
+
+File: core/bspline.py
+Description:
+Pure math functions for B-spline basis functions and curve evaluation using the Cox-de Boor recursion algorithm.
+Functions:
+- _basis_scalar(i, p, u, knots):
+  Recursively calculates the value of the i-th B-spline basis function of degree p at a single parameter value u. Handles zero division and includes the right endpoint u == knots[-1].
+- basis_matrix(knots, degree, n_eval=200):
+  Generates a matrix of all basis functions evaluated over an evenly spaced parameter array from the first knot to the last knot.
+- bspline_curve(knots, degree, control_points, n_eval=200):
+  Multiplies the evaluated basis functions with the control points to return the coordinates of points along the B-spline curve.
+
+File: core/knots.py
+Description:
+Generators for standard knot vectors used in B-spline curves.
+Functions:
+- open_uniform(n_control_points, degree):
+  Generates a clamped open uniform knot vector where the first (degree + 1) knots are 0 and the last (degree + 1) knots are 1, with evenly spaced values in between. This makes the curve pass through the first and last control points.
+- uniform(n_control_points, degree):
+  Generates an integer sequence of knots 0, 1, 2, ..., n + p, used for periodic or uniform B-splines.
+
+File: core/validation.py
+Description:
+Input checking functions that verify data before calculation, raising clear ValueError messages if something is wrong.
+Functions:
+- validate_knots(knots):
+  Verifies that knots are in non-decreasing order and that there are at least 2 knots.
+- validate_degree(degree):
+  Verifies that the polynomial degree is an integer greater than or equal to 0.
+- validate_control_points(points):
+  Verifies that control points form a valid 2D array with either 2 or 3 columns (X, Y or X, Y, Z).
+- validate_bspline_params(knots, degree, n_control_points):
+  Verifies the B-spline rule: len(knots) must equal n_control_points + degree + 1.
+- validate_surface_net(net):
+  Verifies that a surface control net has shape (rows, cols, 3) and is at least 2x2.
+
+File: core/io_json.py
+Description:
+Handles saving and loading curve and surface data to and from JSON files.
+Functions:
+- _make_weights(n):
+  Creates a list of 1.0 weights for all points (prepared for future NURBS support).
+- save(path, data):
+  Saves geometry dictionaries (control points, degree, knots, weights) into a JSON file.
+- load(path):
+  Reads a JSON file, validates its fields, and returns a verified dictionary with numpy arrays.
+
+
+UI PACKAGE (ui/)
+
+File: ui/bezier_tab.py
+Description:
+PyQt5 tab for 2D and 3D Bezier curves. Contains control point inputs, a table of points, degree counter, Draw button, and an embedded Matplotlib canvas.
+Functions / Methods:
+- _init_ui(): Builds the layout with left control panel and right plot canvas.
+- _add_point(): Reads X, Y, Z from text boxes and adds a new row to the table.
+- _remove_selected(): Removes highlighted points from the table.
+- _clear_points(): Clears all points from the table.
+- get_control_points(): Reads table rows and returns them as a numpy array.
+- set_control_points(cp): Populates table rows from a numpy array.
+- get_data(): Returns a dictionary of the curve for JSON saving.
+- set_data(data): Fills the tab from loaded JSON data.
+- _draw(): Evaluates the curve and renders both the curve and control polygon on the canvas.
+
+File: ui/surface_tab.py
+Description:
+PyQt5 tab for 3D Bezier surfaces. Lets the user set row and column grid sizes, edit coordinates in a table, load a 3x3 preset, and view a rotatable 3D surface.
+Functions / Methods:
+- _init_ui(): Builds the layout with grid spinboxes, table, and 3D canvas.
+- _resize_table(): Rebuilds the coordinate table when rows or columns change.
+- _clear_coords(): Sets all coordinate values in the table to 0.
+- _load_default_preset(): Loads the 3x3 test control net from previous repository code.
+- get_control_net(): Reads table rows into a 3D numpy array of shape (rows, cols, 3).
+- set_control_net(net): Populates the table and spinboxes from a 3D numpy array.
+- get_data(): Returns a surface dictionary for JSON saving.
+- set_data(data): Populates the tab from loaded JSON data.
+- _draw(): Evaluates the surface and renders the 3D surface, points, and wireframe mesh.
+
+File: ui/bspline_tab.py
+Description:
+PyQt5 tab for B-splines. Supports knot entry, automatic knot generation, plotting basis functions independently, drawing curves, and exporting data to Excel.
+Functions / Methods:
+- _init_ui(): Builds the layout with parameters, control point table, and plot canvas.
+- parse_knots(): Reads comma- or space-separated knots from the text box into a float list.
+- _generate_open_knots(): Creates clamped open uniform knots based on degree and points.
+- _generate_uniform_knots(): Creates sequential uniform knots based on degree and points.
+- _add_point(): Adds a control point to the table.
+- _remove_point(): Removes selected rows from the table.
+- _clear_points(): Clears all points from the table.
+- get_control_points(): Reads table rows as a numpy array.
+- set_control_points(cp): Populates table rows from a numpy array.
+- _load_matlab_preset(): Loads the 8 control points, degree 2, and 11 knots from the Matlab test script.
+- get_data(): Returns a B-spline dictionary for JSON saving.
+- set_data(data): Populates the tab from loaded JSON data.
+- _plot_basis(): Computes and plots the B-spline basis functions N_{i,p}(u) on the canvas.
+- _draw_curve(): Evaluates and draws the B-spline curve and control polygon.
+- export_basis_excel(filepath=None): Evaluates basis functions and saves them to an Excel spreadsheet (.xlsx) using pandas and openpyxl.
+
+
+APPLICATION ENTRY POINTS
+
+File: app.py
+Description:
+The main window of the unified application. Contains the tab widget hosting BezierTab, SurfaceTab, and BsplineTab, the top menu bar, and the status bar.
+Functions / Methods:
+- MainWindow.__init__(): Initializes the window, status bar, tabs, and menu bar.
+- set_status(message): Updates the status bar at the bottom of the window.
+- _create_menu_bar(): Sets up File (New, Open, Save As, Export Excel, Exit) and Help (About).
+- _file_new(): Clears the currently active tab.
+- _file_open(): Opens a JSON file and loads it into the appropriate tab.
+- _file_save_as(): Saves current tab geometry to a JSON file.
+- _export_excel(): Triggers Excel export on the B-spline tab.
+- _help_about(): Displays an About dialog with information on the CAGD suite.
+- apply_classic_style(app): Sets the classic Windows style and palette.
+- main(): Creates QApplication, sets style, creates MainWindow, and starts the event loop.
+
+File: main.py
+Description:
+The clean, single-point launcher for the application. Imports MainWindow and apply_classic_style from app.py, initializes QApplication, and opens the main window.
+
+
+TEST SUITE (tests/)
+
+File: tests/test_bezier.py
+- test_bernstein_partition_of_unity(): Checks that Bernstein basis polynomials sum to 1.0.
+- test_bezier_endpoint_interpolation(): Checks that curves start at P_0 and end at P_n.
+- test_bezier_closed_form_matches(): Checks that degrees 1, 2, and 3 match algebraic formulas.
+- test_bezier_reference_values_from_matlab(): Checks exact midpoint values from Matlab script.
+- test_bezier_convex_hull_property(): Checks that curve points lie inside the control polygon convex hull.
+- test_bezier_surface_corners_and_shape(): Checks that surface corners interpolate the net corners.
+- test_bezier_validation_errors(): Checks that bad inputs raise ValueError.
+
+File: tests/test_bspline.py
+- test_bspline_partition_of_unity(): Checks that clamped B-spline basis functions sum to 1.0.
+- test_bspline_endpoint_interpolation(): Checks that clamped curves start and end at control points.
+- test_bezier_degree_9_equals_bspline(): Checks that degree 9 Bezier matches clamped B-spline.
+- test_bspline_reference_values_from_matlab(): Checks curve against Matlab Bspline_Verify values.
+- test_bspline_convex_hull_property(): Checks that B-spline curve stays inside convex hull.
+- test_bspline_validation_errors(): Checks that invalid knots, degrees, and counts raise ValueError.
+
+File: tests/test_knots.py
+- test_open_uniform_clamped(): Checks open knot vector structure.
+- test_open_uniform_insufficient_points(): Checks error when points < degree + 1.
+- test_uniform_knots(): Checks sequential integer uniform knot generation.
+
+File: tests/test_io.py
+- test_bezier_curve_roundtrip(): Checks save and reload for Bezier curves.
+- test_bezier_surface_roundtrip(): Checks save and reload for Bezier surfaces.
+- test_bspline_roundtrip(): Checks save and reload for B-spline curves.
+- test_invalid_type_raises(): Checks error handling for unknown geometry types.
+
+
+================================================================================
+3. WHAT LOGIC CHANGED FROM PREVIOUS CODE
+================================================================================
+
+1. In-Process Execution instead of Subprocesses:
+   - Previously: main.py was a launcher that spawned external scripts using Python subprocesses (subprocess.Popen). Many scripts opened separate console windows or standalone dialogs.
+   - Now: Everything runs inside one single window with 3 tabs. Calculations are called directly as in-memory Python functions.
+
+2. Fixed Deprecated NumPy Functions:
+   - Previously: Scripts used np.math.factorial or np.math.comb. In modern NumPy versions (2.0+), np.math has been removed and causes crash errors.
+   - Now: Replaced with the standard Python math.comb function, which is fast, exact, and works on all Python versions.
+
+3. Right-Endpoint Inclusion in B-Splines:
+   - Previously: Cox-de Boor implementations used strict inequality (knots[i] <= u < knots[i+1]). When u reached the last knot (e.g. u = 1.0 or u = 5.0), all basis functions became 0, so the curve dropped to (0, 0) instead of reaching the last control point.
+   - Now: An explicit check includes u == knots[-1] for the last active span, allowing clamped curves to touch the final control point as mathematically intended.
+
+4. Unified B-Spline Basis Function Calculation:
+   - Previously: There were multiple separate files (Basis_function.py, Bspline_Basis_function.py, Basis_test.py, BsplineCurve02.py) with slightly different implementations.
+   - Now: Merged into one thoroughly tested, robust implementation in core/bspline.py.
+
+5. Unified Excel Export:
+   - Previously: Data_Store.py was a standalone script writing a hardcoded matrix to an Excel file path.
+   - Now: Integrated as an interactive button on the B-spline tab and a menu item under File -> "Export basis matrix to Excel...". It lets the user choose any file destination and writes the computed basis matrix with column names.
+
+6. Arbitrary Degree Bezier Curves:
+   - Previously: There were separate files for 1st degree, 2nd degree, 3rd degree, and 3D cubic curves.
+   - Now: One single formula evaluates any degree (from degree 1 up to high degrees) in both 2D and 3D.
+
+
+================================================================================
+4. WAS THE MATHEMATICS CHANGED OR NOT?
+================================================================================
+
+NO. The mathematics was NOT changed.
+The underlying mathematical formulas remain identical:
+- Bezier curves still use Bernstein polynomials:
+    B_{i,n}(u) = C(n, i) * u^i * (1 - u)^(n - i)
+- Bezier surfaces still use tensor products of Bernstein polynomials:
+    S(u, v) = sum_i sum_j B_{i,n}(u) * B_{j,m}(v) * P_{i,j}
+- B-splines still use the standard Cox-de Boor recurrence relation:
+    N_{i,0}(u) = 1 if knots[i] <= u < knots[i+1], else 0
+    N_{i,p}(u) = ((u - knots[i]) / (knots[i+p] - knots[i])) * N_{i,p-1}(u)
+               + ((knots[i+p+1] - u) / (knots[i+p+1] - knots[i+1])) * N_{i+1,p-1}(u)
+    with 0/0 defined as 0.
+- All evaluation results were checked against the Matlab validation scripts and give identical numerical results.
+
+
+================================================================================
+5. WHICH FILES CAN BE SAFELY DELETED
+================================================================================
+
+You can SAFELY DELETE the following:
+
+1. Everything inside the "archive/" directory:
+   - archive/B-Spline Curve/ (all files in this folder)
+   - archive/Bezier Curve/ (all files in this folder)
+   - archive/Bezier Surface/ (all files in this folder)
+   - archive/main_launcher.py
+   (All functionality from these files is now fully incorporated into core/ and ui/.)
+
+2. Temporary cache directories:
+   - .pytest_cache/
+   - __pycache__/ (and any __pycache__ inside core/, ui/, tests/)
+
+FILES YOU MUST NOT DELETE:
+- main.py (starts the application)
+- app.py (main desktop window)
+- core/ (entire folder: bezier.py, bspline.py, knots.py, validation.py, io_json.py, __init__.py)
+- ui/ (entire folder: bezier_tab.py, surface_tab.py, bspline_tab.py, __init__.py)
+- tests/ (entire folder: unit tests)
+- examples/ (sample JSON files)
+- Matlab/ (your original validation scripts)
+- requirements.txt (dependencies)
+- README.md (project instructions)
+- pytest.ini (test configuration)
