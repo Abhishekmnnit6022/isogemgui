@@ -116,7 +116,7 @@ def test_bezier_surface_corners_and_shape():
 
 def test_bezier_validation_errors():
     """Test ValueError is raised for invalid control point inputs."""
-    with pytest.raises(ValueError, match="At least one"):
+    with pytest.raises(ValueError, match="at least 2 control points"):
         validate_control_points(np.empty((0, 2)))
 
     with pytest.raises(ValueError, match="2-D or 3-D"):
@@ -124,3 +124,6 @@ def test_bezier_validation_errors():
 
     with pytest.raises(ValueError, match="at least 2x2"):
         validate_surface_net(np.zeros((1, 3, 3)))
+
+    with pytest.raises(ValueError, match="at least 2 control points"):
+        bezier_curve(np.array([[1.0, 1.0]]))

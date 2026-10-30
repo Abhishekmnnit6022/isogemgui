@@ -14,10 +14,12 @@ from core import io_json
 from ui.bezier_tab import BezierTab
 from ui.surface_tab import SurfaceTab
 from ui.bspline_tab import BsplineTab
+from ui.nurbs_curve_tab import NurbsCurveTab
+from ui.nurbs_surface_tab import NurbsSurfaceTab
 
 
 class MainWindow(QMainWindow):
-    """Main window hosting Bezier Curve, Bezier Surface, and B-Spline tabs."""
+    """Main window hosting Bezier, B-Spline, NURBS Curve, and NURBS Surface tabs."""
 
     def __init__(self):
         super().__init__()
@@ -36,10 +38,14 @@ class MainWindow(QMainWindow):
         self._bezier_tab = BezierTab(status_callback=self.set_status)
         self._surface_tab = SurfaceTab(status_callback=self.set_status)
         self._bspline_tab = BsplineTab(status_callback=self.set_status)
+        self._nurbs_curve_tab = NurbsCurveTab(status_callback=self.set_status)
+        self._nurbs_surface_tab = NurbsSurfaceTab(status_callback=self.set_status)
 
         self._tabs.addTab(self._bezier_tab, "Bezier Curve")
         self._tabs.addTab(self._surface_tab, "Bezier Surface")
         self._tabs.addTab(self._bspline_tab, "B-Spline")
+        self._tabs.addTab(self._nurbs_curve_tab, "NURBS Curve")
+        self._tabs.addTab(self._nurbs_surface_tab, "NURBS Surface")
 
         self._create_menu_bar()
 
@@ -98,6 +104,12 @@ class MainWindow(QMainWindow):
         elif curr_idx == 2:
             self._bspline_tab._clear_points()
             self.set_status("Cleared B-Spline control points")
+        elif curr_idx == 3:
+            self._nurbs_curve_tab._clear_points()
+            self.set_status("Cleared NURBS Curve data")
+        elif curr_idx == 4:
+            self._nurbs_surface_tab._resize_table()
+            self.set_status("Reset NURBS Surface grid")
 
     # Open JSON file and load into the appropriate tab
     def _file_open(self):
@@ -122,6 +134,14 @@ class MainWindow(QMainWindow):
                 self._tabs.setCurrentWidget(self._bspline_tab)
                 self._bspline_tab.set_data(data)
                 self.set_status(f"Loaded B-spline curve from {Path(path).name}")
+            elif geom_type == "nurbs_curve":
+                self._tabs.setCurrentWidget(self._nurbs_curve_tab)
+                self._nurbs_curve_tab.set_data(data)
+                self.set_status(f"Loaded NURBS curve from {Path(path).name}")
+            elif geom_type == "nurbs_surface":
+                self._tabs.setCurrentWidget(self._nurbs_surface_tab)
+                self._nurbs_surface_tab.set_data(data)
+                self.set_status(f"Loaded NURBS surface from {Path(path).name}")
             else:
                 QMessageBox.warning(self, "Open File", f"Unrecognized geometry type: {geom_type}")
         except Exception as e:
@@ -164,6 +184,8 @@ class MainWindow(QMainWindow):
             "  * Bezier Curves (Arbitrary degree, 2D and 3D)\n"
             "  * Bezier Surfaces (Tensor product control nets, 3D interactive view)\n"
             "  * B-Spline Curves (Cox-de Boor recursion, arbitrary knots and degrees)\n"
+            "  * NURBS Curves (Rational B-splines, exact circle demo)\n"
+            "  * NURBS Surfaces (Rational tensor-product surfaces, cylinder demo)\n"
             "  * Excel basis matrix export\n"
             "  * JSON geometry save/load\n\n"
             "Unified Architecture and Pure-Math Core."

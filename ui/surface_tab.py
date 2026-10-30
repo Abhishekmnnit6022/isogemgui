@@ -6,7 +6,7 @@ import numpy as np
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QSpinBox,
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox,
-    QSplitter, QCheckBox, QComboBox, QDoubleSpinBox
+    QSplitter, QCheckBox, QComboBox, QDoubleSpinBox, QDialog, QGridLayout, QToolButton
 )
 from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -77,71 +77,6 @@ class SurfaceTab(QWidget):
         tbl_layout.addLayout(btn_row)
         left.addWidget(tbl_group)
 
-        # Line and Display Options
-        opt_group = QGroupBox("Line & Point Display Options")
-        opt_layout = QVBoxLayout(opt_group)
-
-        chk_row = QHBoxLayout()
-        self._show_lines_chk = QCheckBox("Show Net Lines")
-        self._show_lines_chk.setChecked(True)
-        chk_row.addWidget(self._show_lines_chk)
-
-        self._show_points_chk = QCheckBox("Show Points")
-        self._show_points_chk.setChecked(True)
-        chk_row.addWidget(self._show_points_chk)
-
-        self._show_surface_chk = QCheckBox("Show Surface")
-        self._show_surface_chk.setChecked(True)
-        chk_row.addWidget(self._show_surface_chk)
-        opt_layout.addLayout(chk_row)
-
-        line_prop_row = QHBoxLayout()
-        line_prop_row.addWidget(QLabel("Line Color:"))
-        self._line_color_combo = QComboBox()
-        self._line_color_combo.addItems(["blue", "red", "green", "black", "orange", "magenta", "gray"])
-        line_prop_row.addWidget(self._line_color_combo)
-
-        line_prop_row.addWidget(QLabel("Style:"))
-        self._line_style_combo = QComboBox()
-        self._line_style_combo.addItem("dashed", "--")
-        self._line_style_combo.addItem("solid", "-")
-        self._line_style_combo.addItem("dotted", ":")
-        self._line_style_combo.addItem("dash-dot", "-.")
-        line_prop_row.addWidget(self._line_style_combo)
-
-        line_prop_row.addWidget(QLabel("Width:"))
-        self._line_width_spin = QDoubleSpinBox()
-        self._line_width_spin.setRange(0.5, 8.0)
-        self._line_width_spin.setSingleStep(0.5)
-        self._line_width_spin.setValue(1.5)
-        line_prop_row.addWidget(self._line_width_spin)
-        opt_layout.addLayout(line_prop_row)
-
-        pt_prop_row = QHBoxLayout()
-        pt_prop_row.addWidget(QLabel("Point Color:"))
-        self._point_color_combo = QComboBox()
-        self._point_color_combo.addItems(["blue", "red", "green", "black", "orange", "magenta", "cyan", "yellow"])
-        pt_prop_row.addWidget(self._point_color_combo)
-
-        pt_prop_row.addWidget(QLabel("Marker:"))
-        self._point_marker_combo = QComboBox()
-        self._point_marker_combo.addItem("circle", "o")
-        self._point_marker_combo.addItem("square", "s")
-        self._point_marker_combo.addItem("triangle", "^")
-        self._point_marker_combo.addItem("diamond", "D")
-        self._point_marker_combo.addItem("cross", "x")
-        pt_prop_row.addWidget(self._point_marker_combo)
-
-        pt_prop_row.addWidget(QLabel("Size:"))
-        self._point_size_spin = QDoubleSpinBox()
-        self._point_size_spin.setRange(2.0, 20.0)
-        self._point_size_spin.setSingleStep(1.0)
-        self._point_size_spin.setValue(7.0)
-        pt_prop_row.addWidget(self._point_size_spin)
-        opt_layout.addLayout(pt_prop_row)
-
-        left.addWidget(opt_group)
-
         draw_btn = QPushButton("Plot Surface")
         draw_btn.clicked.connect(self._draw)
         left.addWidget(draw_btn)
@@ -150,11 +85,102 @@ class SurfaceTab(QWidget):
         left_widget = QWidget()
         left_widget.setLayout(left)
 
+        # Style Options Dialog
+        self._style_dialog = QDialog(self)
+        self._style_dialog.setWindowTitle("Display & Style Options")
+        dlg_layout = QVBoxLayout(self._style_dialog)
+        dlg_layout.setSpacing(10)
+
+        grid = QGridLayout()
+        grid.addWidget(QLabel("Line Color:"), 0, 0)
+        self._line_color_combo = QComboBox()
+        self._line_color_combo.addItems(["blue", "red", "green", "black", "orange", "magenta", "gray"])
+        self._line_color_combo.currentIndexChanged.connect(self._on_display_option_changed)
+        grid.addWidget(self._line_color_combo, 0, 1)
+
+        grid.addWidget(QLabel("Style:"), 0, 2)
+        self._line_style_combo = QComboBox()
+        self._line_style_combo.addItem("dashed", "--")
+        self._line_style_combo.addItem("solid", "-")
+        self._line_style_combo.addItem("dotted", ":")
+        self._line_style_combo.addItem("dash-dot", "-.")
+        self._line_style_combo.currentIndexChanged.connect(self._on_display_option_changed)
+        grid.addWidget(self._line_style_combo, 0, 3)
+
+        grid.addWidget(QLabel("Width:"), 1, 0)
+        self._line_width_spin = QDoubleSpinBox()
+        self._line_width_spin.setRange(0.5, 8.0)
+        self._line_width_spin.setSingleStep(0.5)
+        self._line_width_spin.setValue(1.5)
+        self._line_width_spin.valueChanged.connect(self._on_display_option_changed)
+        grid.addWidget(self._line_width_spin, 1, 1)
+
+        grid.addWidget(QLabel("Point Color:"), 1, 2)
+        self._point_color_combo = QComboBox()
+        self._point_color_combo.addItems(["blue", "red", "green", "black", "orange", "magenta", "cyan", "yellow"])
+        self._point_color_combo.currentIndexChanged.connect(self._on_display_option_changed)
+        grid.addWidget(self._point_color_combo, 1, 3)
+
+        grid.addWidget(QLabel("Marker:"), 2, 0)
+        self._point_marker_combo = QComboBox()
+        self._point_marker_combo.addItem("circle", "o")
+        self._point_marker_combo.addItem("square", "s")
+        self._point_marker_combo.addItem("triangle", "^")
+        self._point_marker_combo.addItem("diamond", "D")
+        self._point_marker_combo.addItem("cross", "x")
+        self._point_marker_combo.currentIndexChanged.connect(self._on_display_option_changed)
+        grid.addWidget(self._point_marker_combo, 2, 1)
+
+        grid.addWidget(QLabel("Size:"), 2, 2)
+        self._point_size_spin = QDoubleSpinBox()
+        self._point_size_spin.setRange(2.0, 20.0)
+        self._point_size_spin.setSingleStep(1.0)
+        self._point_size_spin.setValue(7.0)
+        self._point_size_spin.valueChanged.connect(self._on_display_option_changed)
+        grid.addWidget(self._point_size_spin, 2, 3)
+        dlg_layout.addLayout(grid)
+
+        dlg_btn_row = QHBoxLayout()
+        dlg_btn_row.addStretch()
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self._style_dialog.accept)
+        dlg_btn_row.addWidget(close_btn)
+        dlg_layout.addLayout(dlg_btn_row)
+
         # 3D interactive plot canvas on the right
         right = QVBoxLayout()
         self._figure = Figure()
         self._canvas = FigureCanvasQTAgg(self._figure)
         self._toolbar = NavigationToolbar2QT(self._canvas, self)
+
+        # Add display options to toolbar ribbon
+        self._toolbar.addSeparator()
+
+        self._show_surface_chk = QCheckBox("Surface")
+        self._show_surface_chk.setChecked(True)
+        self._show_surface_chk.setToolTip("Show/hide 3D surface mesh")
+        self._show_surface_chk.stateChanged.connect(self._on_display_option_changed)
+        self._toolbar.addWidget(self._show_surface_chk)
+
+        self._show_lines_chk = QCheckBox("Net Lines")
+        self._show_lines_chk.setChecked(True)
+        self._show_lines_chk.setToolTip("Show/hide control net wireframe lines")
+        self._show_lines_chk.stateChanged.connect(self._on_display_option_changed)
+        self._toolbar.addWidget(self._show_lines_chk)
+
+        self._show_points_chk = QCheckBox("Points")
+        self._show_points_chk.setChecked(True)
+        self._show_points_chk.setToolTip("Show/hide control net points")
+        self._show_points_chk.stateChanged.connect(self._on_display_option_changed)
+        self._toolbar.addWidget(self._show_points_chk)
+
+        self._toolbar.addSeparator()
+        self._style_btn = QToolButton(self._toolbar)
+        self._style_btn.setText("Style Options...")
+        self._style_btn.setToolTip("Configure net line colors, styles, widths, and point markers")
+        self._style_btn.clicked.connect(self._open_style_dialog)
+        self._toolbar.addWidget(self._style_btn)
+
         right.addWidget(self._toolbar)
         right.addWidget(self._canvas)
 
@@ -167,6 +193,17 @@ class SurfaceTab(QWidget):
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 2)
         main.addWidget(splitter)
+
+    def _open_style_dialog(self):
+        self._style_dialog.exec_()
+        self._on_display_option_changed()
+
+    def _on_display_option_changed(self):
+        if self._table.rowCount() >= 4:
+            try:
+                self._draw()
+            except Exception:
+                pass
 
     # Adjust table rows according to rows and cols spinbox values
     def _resize_table(self):
@@ -352,6 +389,8 @@ class SurfaceTab(QWidget):
         ax.set_ylabel("Y")
         ax.set_zlabel("Z")
         ax.set_title(f"Bezier Surface (degree {nu - 1} x {nv - 1})")
-        ax.legend()
+        handles, labels = ax.get_legend_handles_labels()
+        if labels:
+            ax.legend()
         self._canvas.draw()
         self._status(f"Surface drawn: degree {nu-1}x{nv-1}, {nu}x{nv} control net")

@@ -8,7 +8,8 @@ import pandas as pd
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QLineEdit,
     QSpinBox, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
-    QMessageBox, QSplitter, QFileDialog, QCheckBox, QComboBox, QDoubleSpinBox
+    QMessageBox, QSplitter, QFileDialog, QCheckBox, QComboBox, QDoubleSpinBox,
+    QDialog, QGridLayout, QToolButton
 )
 from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -115,68 +116,6 @@ class BsplineTab(QWidget):
 
         left.addWidget(cp_group)
 
-        # Line and Display Options
-        opt_group = QGroupBox("Line & Point Display Options")
-        opt_layout = QVBoxLayout(opt_group)
-
-        chk_row = QHBoxLayout()
-        self._show_poly_chk = QCheckBox("Show Polygon")
-        self._show_poly_chk.setChecked(True)
-        chk_row.addWidget(self._show_poly_chk)
-
-        self._show_points_chk = QCheckBox("Show Points")
-        self._show_points_chk.setChecked(True)
-        chk_row.addWidget(self._show_points_chk)
-
-        self._show_curve_chk = QCheckBox("Show Curve")
-        self._show_curve_chk.setChecked(True)
-        chk_row.addWidget(self._show_curve_chk)
-        opt_layout.addLayout(chk_row)
-
-        color_row1 = QHBoxLayout()
-        color_row1.addWidget(QLabel("Poly Color:"))
-        self._poly_color_combo = QComboBox()
-        self._poly_color_combo.addItems(["blue", "red", "green", "black", "orange", "magenta", "gray"])
-        color_row1.addWidget(self._poly_color_combo)
-
-        color_row1.addWidget(QLabel("Point Color:"))
-        self._point_color_combo = QComboBox()
-        self._point_color_combo.addItems(["blue", "red", "green", "black", "orange", "magenta", "cyan", "yellow"])
-        color_row1.addWidget(self._point_color_combo)
-        opt_layout.addLayout(color_row1)
-
-        color_row2 = QHBoxLayout()
-        color_row2.addWidget(QLabel("Curve Color:"))
-        self._curve_color_combo = QComboBox()
-        self._curve_color_combo.addItems(["red", "blue", "green", "black", "orange", "purple"])
-        color_row2.addWidget(self._curve_color_combo)
-
-        color_row2.addWidget(QLabel("Poly Style:"))
-        self._poly_style_combo = QComboBox()
-        self._poly_style_combo.addItem("dashed", "--")
-        self._poly_style_combo.addItem("solid", "-")
-        self._poly_style_combo.addItem("dotted", ":")
-        color_row2.addWidget(self._poly_style_combo)
-        opt_layout.addLayout(color_row2)
-
-        size_row = QHBoxLayout()
-        size_row.addWidget(QLabel("Line Width:"))
-        self._line_width_spin = QDoubleSpinBox()
-        self._line_width_spin.setRange(0.5, 8.0)
-        self._line_width_spin.setSingleStep(0.5)
-        self._line_width_spin.setValue(1.5)
-        size_row.addWidget(self._line_width_spin)
-
-        size_row.addWidget(QLabel("Point Size:"))
-        self._point_size_spin = QDoubleSpinBox()
-        self._point_size_spin.setRange(2.0, 20.0)
-        self._point_size_spin.setSingleStep(1.0)
-        self._point_size_spin.setValue(7.0)
-        size_row.addWidget(self._point_size_spin)
-        opt_layout.addLayout(size_row)
-
-        left.addWidget(opt_group)
-
         draw_btn = QPushButton("Draw Curve")
         draw_btn.clicked.connect(self._draw_curve)
         left.addWidget(draw_btn)
@@ -190,11 +129,97 @@ class BsplineTab(QWidget):
         left_widget = QWidget()
         left_widget.setLayout(left)
 
+        # Style Options Dialog
+        self._style_dialog = QDialog(self)
+        self._style_dialog.setWindowTitle("Display & Style Options")
+        dlg_layout = QVBoxLayout(self._style_dialog)
+        dlg_layout.setSpacing(10)
+
+        grid = QGridLayout()
+        grid.addWidget(QLabel("Poly Color:"), 0, 0)
+        self._poly_color_combo = QComboBox()
+        self._poly_color_combo.addItems(["blue", "red", "green", "black", "orange", "magenta", "gray"])
+        self._poly_color_combo.currentIndexChanged.connect(self._on_display_option_changed)
+        grid.addWidget(self._poly_color_combo, 0, 1)
+
+        grid.addWidget(QLabel("Point Color:"), 0, 2)
+        self._point_color_combo = QComboBox()
+        self._point_color_combo.addItems(["blue", "red", "green", "black", "orange", "magenta", "cyan", "yellow"])
+        self._point_color_combo.currentIndexChanged.connect(self._on_display_option_changed)
+        grid.addWidget(self._point_color_combo, 0, 3)
+
+        grid.addWidget(QLabel("Curve Color:"), 1, 0)
+        self._curve_color_combo = QComboBox()
+        self._curve_color_combo.addItems(["red", "blue", "green", "black", "orange", "purple"])
+        self._curve_color_combo.currentIndexChanged.connect(self._on_display_option_changed)
+        grid.addWidget(self._curve_color_combo, 1, 1)
+
+        grid.addWidget(QLabel("Poly Style:"), 1, 2)
+        self._poly_style_combo = QComboBox()
+        self._poly_style_combo.addItem("dashed", "--")
+        self._poly_style_combo.addItem("solid", "-")
+        self._poly_style_combo.addItem("dotted", ":")
+        self._poly_style_combo.currentIndexChanged.connect(self._on_display_option_changed)
+        grid.addWidget(self._poly_style_combo, 1, 3)
+
+        grid.addWidget(QLabel("Line Width:"), 2, 0)
+        self._line_width_spin = QDoubleSpinBox()
+        self._line_width_spin.setRange(0.5, 8.0)
+        self._line_width_spin.setSingleStep(0.5)
+        self._line_width_spin.setValue(1.5)
+        self._line_width_spin.valueChanged.connect(self._on_display_option_changed)
+        grid.addWidget(self._line_width_spin, 2, 1)
+
+        grid.addWidget(QLabel("Point Size:"), 2, 2)
+        self._point_size_spin = QDoubleSpinBox()
+        self._point_size_spin.setRange(2.0, 20.0)
+        self._point_size_spin.setSingleStep(1.0)
+        self._point_size_spin.setValue(7.0)
+        self._point_size_spin.valueChanged.connect(self._on_display_option_changed)
+        grid.addWidget(self._point_size_spin, 2, 3)
+        dlg_layout.addLayout(grid)
+
+        dlg_btn_row = QHBoxLayout()
+        dlg_btn_row.addStretch()
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self._style_dialog.accept)
+        dlg_btn_row.addWidget(close_btn)
+        dlg_layout.addLayout(dlg_btn_row)
+
         # Plot area on the right
         right = QVBoxLayout()
         self._figure = Figure()
         self._canvas = FigureCanvasQTAgg(self._figure)
         self._toolbar = NavigationToolbar2QT(self._canvas, self)
+
+        # Add display options to toolbar ribbon
+        self._toolbar.addSeparator()
+
+        self._show_poly_chk = QCheckBox("Polygon")
+        self._show_poly_chk.setChecked(True)
+        self._show_poly_chk.setToolTip("Show/hide control polygon")
+        self._show_poly_chk.stateChanged.connect(self._on_display_option_changed)
+        self._toolbar.addWidget(self._show_poly_chk)
+
+        self._show_points_chk = QCheckBox("Points")
+        self._show_points_chk.setChecked(True)
+        self._show_points_chk.setToolTip("Show/hide control points")
+        self._show_points_chk.stateChanged.connect(self._on_display_option_changed)
+        self._toolbar.addWidget(self._show_points_chk)
+
+        self._show_curve_chk = QCheckBox("Curve")
+        self._show_curve_chk.setChecked(True)
+        self._show_curve_chk.setToolTip("Show/hide B-spline curve")
+        self._show_curve_chk.stateChanged.connect(self._on_display_option_changed)
+        self._toolbar.addWidget(self._show_curve_chk)
+
+        self._toolbar.addSeparator()
+        self._style_btn = QToolButton(self._toolbar)
+        self._style_btn.setText("Style Options...")
+        self._style_btn.setToolTip("Configure line colors, styles, widths, and point sizes")
+        self._style_btn.clicked.connect(self._open_style_dialog)
+        self._toolbar.addWidget(self._style_btn)
+
         right.addWidget(self._toolbar)
         right.addWidget(self._canvas)
 
@@ -207,6 +232,17 @@ class BsplineTab(QWidget):
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 2)
         main.addWidget(splitter)
+
+    def _open_style_dialog(self):
+        self._style_dialog.exec_()
+        self._on_display_option_changed()
+
+    def _on_display_option_changed(self):
+        if self._table.rowCount() >= 2:
+            try:
+                self._draw_curve()
+            except Exception:
+                pass
 
     # Parse and validate the knot values entered in the text box
     def parse_knots(self) -> List[float]:
@@ -450,7 +486,9 @@ class BsplineTab(QWidget):
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
         ax.set_title(f"B-Spline Curve (degree {deg}, {cp.shape[0]} control points)")
-        ax.legend()
+        handles, labels = ax.get_legend_handles_labels()
+        if labels:
+            ax.legend()
         ax.grid(True)
         self._canvas.draw()
         self._status(f"Curve drawn: degree {deg}, {cp.shape[0]} control points")

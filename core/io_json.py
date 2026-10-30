@@ -14,9 +14,12 @@ from .validation import (
     validate_degree,
     validate_knots,
     validate_surface_net,
+    validate_surface_weights,
+    validate_weights,
 )
 
-VALID_TYPES = {"bezier_curve", "bezier_surface", "bspline_curve"}
+VALID_TYPES = {"bezier_curve", "bezier_surface", "bspline_curve",
+               "nurbs_curve", "nurbs_surface"}
 
 
 # Creates a list of default 1.0 weights
@@ -33,22 +36,18 @@ def save(path: str | Path, data: Dict[str, Any]) -> None:
     if geom_type not in VALID_TYPES:
         raise ValueError(f"Unknown geometry type '{geom_type}'. Must be one of {VALID_TYPES}.")
 
-    if "control_points" in data:
-        cp = data["control_points"]
-        if isinstance(cp, np.ndarray):
-            cp = cp.tolist()
-        data["control_points"] = cp
-
-    if "knots" in data:
-        k = data["knots"]
-        if isinstance(k, np.ndarray):
-            k = k.tolist()
-        data["knots"] = k
+    # Convert numpy arrays to plain lists for JSON serialization
+    for key in ("control_points", "knots", "weights",
+                "knots_u", "knots_v"):
+        if key in data and isinstance(data[key], np.ndarray):
+            data[key] = data[key].tolist()
 
     if "weights" not in data or data["weights"] is None:
         if geom_type == "bezier_surface":
             net = np.asarray(data["control_points"])
             data["weights"] = _make_weights(int(net.size // 3))
+        elif geom_type == "nurbs_surface":
+            pass  # weights are mandatory for NURBS surface
         else:
             data["weights"] = _make_weights(len(data["control_points"]))
 
@@ -85,5 +84,33 @@ def load(path: str | Path) -> Dict[str, Any]:
         data["control_points"] = cp
         data["knots"] = knots
         data["degree"] = degree
+
+    elif geom_type == "nurbs_curve":
+        cp = validate_control_points(data["control_points"])
+        knots = validate_knots(data["knots"])
+        degree = validate_degree(data["degree"])
+        validate_bspline_params(knots, degree, cp.shape[0])
+        w = validate_weights(data["weights"], cp.shape[0])
+        data["control_points"] = cp
+        data["knots"] = knots
+        data["degree"] = degree
+        data["weights"] = w.tolist()
+
+    elif geom_type == "nurbs_surface":
+        net = validate_surface_net(data["control_points"])
+        ku = validate_knots(data["knots_u"])
+        kv = validate_knots(data["knots_v"])
+        du = validate_degree(data["degree_u"])
+        dv = validate_degree(data["degree_v"])
+        rows, cols, _ = net.shape
+        validate_bspline_params(ku, du, rows)
+        validate_bspline_params(kv, dv, cols)
+        w = validate_surface_weights(data["weights"], rows, cols)
+        data["control_points"] = net
+        data["knots_u"] = ku
+        data["knots_v"] = kv
+        data["degree_u"] = du
+        data["degree_v"] = dv
+        data["weights"] = w.tolist()
 
     return data

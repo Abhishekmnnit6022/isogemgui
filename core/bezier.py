@@ -25,8 +25,8 @@ def bezier_curve(
     n = cp.shape[0] - 1
     dim = cp.shape[1]
 
-    if n < 0:
-        raise ValueError("Need at least one control point.")
+    if n < 1:
+        raise ValueError("A Bezier curve requires at least 2 control points.")
 
     u = np.linspace(0.0, 1.0, n_eval)
     curve = np.zeros((n_eval, dim))

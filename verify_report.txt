@@ -1,0 +1,82 @@
+PASS	exists: main.py	
+PASS	exists: app.py	
+PASS	exists: core/__init__.py	
+PASS	exists: core/bezier.py	
+PASS	exists: core/bspline.py	
+PASS	exists: core/knots.py	
+PASS	exists: core/io_json.py	
+PASS	exists: core/validation.py	
+PASS	exists: ui/bezier_tab.py	
+PASS	exists: ui/surface_tab.py	
+PASS	exists: ui/bspline_tab.py	
+PASS	exists: requirements.txt	
+PASS	exists: README.md	
+PASS	tests/ has >= 3 test files	
+PASS	examples/ has >= 3 JSON files	
+FAIL	archive/ keeps old scripts	archive/ has 0 .py files, old scripts should be kept (>= 10)
+PASS	Matlab folder kept	
+PASS	core/ is pure (no matplotlib/PyQt/tkinter/input)	
+PASS	core/ has no print() calls	
+PASS	no Tkinter outside archive/	
+PASS	no subprocess launching in app/ui/main	
+PASS	no np.math usage	
+PASS	no custom stylesheet / palette / Fusion	
+PASS	no dark or navy colour values	
+PASS	requirements.txt lists key packages	
+PASS	(self-test) reference implementations agree	
+PASS	Bezier curve 2D, degrees 1..9 match Bernstein reference	
+PASS	Bezier curve 3D, degrees 1..5 match Bernstein reference	
+PASS	cubic Bezier (1,1),(2,3),(4,3),(3,1) at u=0.5 = (2.75, 2.5)	
+PASS	Bezier curve interpolates first and last control point	
+PASS	Bezier curve lies in convex hull of control points	
+PASS	basis matrix matches Cox-de Boor reference (thesis open non-uniform, p=2)	
+PASS	partition of unity incl. right end point (thesis open non-uniform, p=2)	
+PASS	basis matrix matches Cox-de Boor reference (clamped uniform, p=2)	
+PASS	partition of unity incl. right end point (clamped uniform, p=2)	
+PASS	basis matrix matches Cox-de Boor reference (clamped, p=3 with double knot)	
+PASS	partition of unity incl. right end point (clamped, p=3 with double knot)	
+PASS	basis matrix matches Cox-de Boor reference (Bezier-like p=4)	
+PASS	partition of unity incl. right end point (Bezier-like p=4)	
+PASS	hand value N0,2(0.5) = 0.25 for thesis knots	
+PASS	B-spline curve vs reference (thesis example)	
+PASS	B-spline curve matches scipy.interpolate.BSpline (p=3)	
+PASS	clamped B-spline interpolates end control points	
+PASS	clamped B-spline lies in convex hull	
+PASS	B-spline with knots [0]*10+[1]*10 equals degree-9 Bezier	
+PASS	Bezier surface 3x3 (thesis general net) matches reference	
+PASS	Bezier surface non-square 4x3 net matches reference	
+PASS	Bezier surface passes through the 4 corner control points	
+PASS	Bezier surface lies in convex hull of control net	
+PASS	knot generator returns clamped, non-decreasing vector	
+PASS	too few control points -> clear ValueError	
+PASS	too many control points -> clear ValueError	
+PASS	decreasing knot vector -> clear ValueError	
+PASS	degree 0 / negative degree -> clear ValueError	
+PASS	Bezier with a single control point -> clear ValueError	
+PASS	non-rectangular surface net rejected	
+PASS	validation module exposes functions	
+PASS	saved file has keys type/degree/knots/control_points/weights	
+PASS	save -> load round trip is lossless	
+PASS	weights default to 1 for every control point	
+PASS	loading inconsistent geometry is rejected	
+PASS	examples/*.json all load; one per geometry type	
+PASS	project's own pytest suite	39 passed in 0.63s
+PASS	project tests look substantive	
+PASS	app.py: main window starts without errors	
+PASS	QTabWidget with Bezier / Surface / B-Spline tabs	tabs: ['bezier curve', 'bezier surface', 'b-spline', 'nurbs curve', 'nurbs surface']
+PASS	File menu has Open / Save / Exit	
+PASS	light native palette, no stylesheets	
+PASS	each tab embeds a FigureCanvasQTAgg	
+PASS	screenshots of every tab	saved ['tab0_bezier_curve.png', 'tab1_bezier_surface.png', 'tab2_b_spline.png', 'tab3_nurbs_curve.png', 'tab4_nurbs_surface.png'] in verify_output/ - LOOK AT THEM (old-school, no dark blue?)
+PASS	Draw/Plot buttons survive empty input (no uncaught exception)	clicked ['&Draw Curve', 'Plot Surface', 'Plot Basis Functions', 'Draw Curve', '&Draw Curve', '&Draw Surface'] on empty input: no crash, 3 message box(es) shown
+
+MANUAL CHECKLIST (5 minutes, things a script cannot judge)
+  [ ] python main.py opens ONE window; no extra console prompts / input() calls
+  [ ] B-Spline tab: knots 0,0,0,1,2,3,4,4,5,5,5 / degree 2 / points from thesis Fig 4.19
+      -> basis plot has 8 curves and the curve matches thesis Fig 4.20
+  [ ] Bezier tab: add (1,1) (2,3) (4,3) (3,1) -> shape matches thesis Fig 4.8
+  [ ] Surface tab: thesis 3x3 net -> surface matches Fig 4.14 / 4.16; mouse rotates it
+  [ ] Type garbage / leave fields empty -> message box, not a crash
+  [ ] File > Save then File > Open restores the same plot
+  [ ] Window looks plain and old-school: grey system colours, no cards, no dark blue
+  [ ] Window resizes sensibly; plots are not clipped

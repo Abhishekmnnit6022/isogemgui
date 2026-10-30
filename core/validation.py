@@ -56,8 +56,8 @@ def validate_control_points(points: np.ndarray) -> np.ndarray:
             f"Control points must be a 2-D array (n_points x dimension), "
             f"got shape {pts.shape}."
         )
-    if pts.shape[0] < 1:
-        raise ValueError("At least one control point is required.")
+    if pts.shape[0] < 2:
+        raise ValueError("A Bezier curve requires at least 2 control points.")
     if pts.shape[1] not in (2, 3):
         raise ValueError(
             f"Control points must be 2-D or 3-D (columns=2 or 3), "
@@ -110,3 +110,43 @@ def validate_surface_net(net: np.ndarray) -> np.ndarray:
             f"Surface control net must be at least 2x2, got {net.shape[0]}x{net.shape[1]}."
         )
     return net
+
+
+def validate_weights(weights: Sequence[float], n_expected: int) -> np.ndarray:
+    """Check that *weights* is a 1-D array of positive values with length *n_expected*.
+
+    Returns a numpy array of floats.
+
+    Raises:
+        ValueError: on bad input.
+    """
+    w = np.asarray(weights, dtype=float).ravel()
+    if w.shape[0] != n_expected:
+        raise ValueError(
+            f"Expected {n_expected} weights (one per control point), "
+            f"got {w.shape[0]}."
+        )
+    if np.any(w <= 0.0):
+        raise ValueError("All weights must be strictly positive.")
+    return w
+
+
+def validate_surface_weights(
+    weights: Sequence[Sequence[float]], rows: int, cols: int
+) -> np.ndarray:
+    """Check that *weights* is a 2-D array of shape (rows, cols) with positive values.
+
+    Returns a numpy array of shape (rows, cols).
+
+    Raises:
+        ValueError: on bad input.
+    """
+    w = np.asarray(weights, dtype=float)
+    if w.ndim != 2 or w.shape[0] != rows or w.shape[1] != cols:
+        raise ValueError(
+            f"Weights must have shape ({rows}, {cols}) matching the control net, "
+            f"got shape {w.shape}."
+        )
+    if np.any(w <= 0.0):
+        raise ValueError("All weights must be strictly positive.")
+    return w
