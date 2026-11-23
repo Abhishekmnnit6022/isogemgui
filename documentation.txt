@@ -22,7 +22,7 @@ What was created:
   * ui/__init__.py
 - app.py: The main unified desktop application with tabs, menus, and status bar.
 - main.py: Clean application launcher that starts app.py.
-- tests/: Full pytest test suite with 39 passing unit tests.
+- tests/: Full pytest test suite with 92 passing tests (math, JSON and headless GUI).
   * tests/test_bezier.py
   * tests/test_bspline.py
   * tests/test_knots.py
@@ -86,7 +86,20 @@ Functions:
 - nurbs_circle(radius=1.0, center=(0.0, 0.0)):
   Generates standard 9-point quadratic NURBS circle with alternating weights 1 and sqrt(2)/2.
 - nurbs_cylinder(radius=1.0, height=1.0):
-  Generates extruded cylinder surface (degree 2 along u, degree 1 along v).
+  Generates extruded cylinder surface (degree 2 along u, degree 1 along v), built with extrude_curve.
+- extrude_curve(control_points, weights, knots, degree, height=1.0):
+  Sweeps a 2D NURBS curve along z into a NURBS surface (curve along u, linear along v).
+- t_profile(flange_width=4, flange_thickness=1, stem_width=1, stem_height=3, fillet_radius=0.4):
+  Closed T cross-section as a degree-2 NURBS curve: straight edges and two exact quarter-circle
+  fillets at the inner corners, joined by double knots (21 control points; 17 when fillet_radius=0).
+- nurbs_t_shape(..., depth=1.0):
+  3D T-shape surface: t_profile extruded along z (21x2 net, degree 2x1).
+- sample_parameters(knots, n_eval=200):
+  Evenly spaced parameters merged with every distinct knot, so sharp corners are evaluated exactly.
+- fit_circle(points):
+  Least-squares circle through 2D points; returns (cx, cy, radius, max_radius_error).
+Note: nurbs_curve and nurbs_surface also accept explicit parameter values (u_values / v_values).
+nurbs_surface computes each direction's basis once and combines them with NumPy.
 
 File: core/knots.py
 Description:
@@ -180,29 +193,40 @@ Functions / Methods:
 
 File: ui/nurbs_curve_tab.py
 Description:
-PyQt5 tab for NURBS curves. Supports rational weights for each control point, overlaying unweighted B-spline curves for visual comparison, loading the exact 9-point circle demo, and calculating exact circle radius error.
+PyQt5 tab for NURBS curves. Supports rational weights for each control point, overlaying unweighted B-spline curves for visual comparison (2D and 3D), plotting and exporting the rational basis, loading the exact 9-point circle and T-profile demos, and reporting circle radius error.
 Functions / Methods:
-- _init_ui(): Builds the layout with knots, degree spinbox, X/Y/Z/W coordinate & weight table, buttons, and 2D/3D plot canvas.
+- _init_ui(): Builds the layout with knots, degree spinbox, basis buttons, X/Y/Z/W coordinate & weight table, example buttons, and 2D/3D plot canvas.
+- parse_knots(): Reads the knot text box (lossless, via ui/common.py).
 - _add_point(): Appends a new point with default weight 1.0.
 - _remove_selected(): Deletes highlighted rows.
 - _clear_points(): Clears all table rows.
-- _load_circle_example(): Loads the standard 9-point quadratic exact circle geometry.
+- reset(): Clears table, knots and plot (used by File -> New).
+- _load_circle(): Loads the standard 9-point quadratic exact circle geometry.
+- _load_t_profile(): Loads the closed T cross-section (21 points, degree 2).
 - get_data(): Returns a dictionary of the NURBS curve for JSON saving.
 - set_data(data): Fills the tab from loaded JSON data.
-- _draw(): Evaluates the NURBS curve, renders polygon and curve, optionally plots unweighted B-spline overlay, and computes circle radius error if matching circle topology.
+- _plot_rational_basis(): Plots R_i(u); with the overlay checkbox also the plain N_i(u).
+- export_rational_basis_excel(filepath=None): Saves R_i(u) to an .xlsx file.
+- _draw(): Evaluates the NURBS curve (sampling includes every knot), renders polygon and curve, optionally the unweighted B-spline overlay, and reports centre/radius/max radius error when the curve is a circle or circular arc (least-squares circle fit).
 
 File: ui/nurbs_surface_tab.py
 Description:
-PyQt5 tab for 3D NURBS surfaces. Provides row/col spinboxes, dual tables for 3D coordinates and weights, knot/degree inputs for u and v, cylinder example loader, and interactive rotatable 3D surface rendering.
+PyQt5 tab for 3D NURBS surfaces. Provides row/col spinboxes (tables follow automatically), dual tables for 3D coordinates and weights, knot/degree inputs for u and v, cylinder and 3D T-shape example loaders, toolbar display toggles with a style dialog, and interactive rotatable 3D surface rendering with true proportions.
 Functions / Methods:
-- _init_ui(): Builds grid controls, coordinate & weight tables, parameter fields, and 3D Matplotlib canvas.
-- _resize_tables(): Synchronizes table dimensions when row or column spinboxes change.
-- _clear_coords(): Resets coordinate cells to 0.0.
+- _init_ui() / _build_style_dialog(): Build grid controls, tables, parameter fields, toolbar toggles, style dialog and 3D canvas.
+- _resize_table(): Synchronizes both tables with the row/col spinboxes, keeping existing values.
 - _reset_weights(): Sets all weights in grid to 1.0.
-- _load_cylinder_example(): Populates the extruded degree 2x1 cylinder geometry.
+- _generate_open_knots(): Generates clamped open knots for U and V.
+- reset(): Restores a drawable default 3x2 net with weights 1 and open knots (used by File -> New).
+- _load_cylinder(): Populates the extruded degree 2x1 cylinder geometry.
+- _load_t_shape(): Populates the 3D T-shape (21x2 net, degree 2x1).
 - get_data(): Returns a dictionary of the NURBS surface for JSON saving.
 - set_data(data): Fills the tab from loaded JSON data.
-- _draw(): Evaluates the NURBS surface and renders 3D surface mesh with optional control net.
+- _draw(silent=False): Evaluates the NURBS surface and renders it with optional net lines and points; display-option changes redraw silently.
+
+File: ui/common.py
+Description:
+Shared helpers: format_number() / format_knots() write values with full precision (1/3 stays 0.3333333333333333); parse_knots_text() parses and validates knot text with clear messages.
 
 APPLICATION ENTRY POINTS
 
@@ -384,7 +408,7 @@ FILES YOU MUST NOT DELETE:
    - Click "Draw Curve".
    - The exact circle is plotted in red with its 9-point control polygon in blue dashes.
    - The status bar displays the maximum radius error against the unit circle:
-       "Max radius error: 0.000000e+00 (exact circle)"
+       "Circle: centre (0, 0), radius 1, max radius error = 4.44e-16"
    - To visualize the difference that rational weights make, check "Show B-spline (all weights = 1)"
      and click "Draw Curve" again to see the unweighted B-spline overlaid in blue dashed lines.
 
@@ -462,11 +486,11 @@ A. NURBS Curve Tab:
       - Notice the 9 control points in the table with alternating weights 1.0 and 0.70710678... (sqrt(2)/2).
       - Click "Draw Curve":
         * The curve renders in solid red, and the control polygon appears in blue dashed lines.
-        * The status bar shows: "Max radius error: 0.000000e+00 (exact circle)".
+        * The status bar shows: "Circle: centre (0, 0), radius 1, max radius error = 4.44e-16".
    2. Comparison with Unweighted B-Spline:
       - Check "Show B-spline (all weights = 1)".
       - Click "Draw Curve":
-        * An unweighted B-spline curve appears in blue dashed lines directly inside the exact red circle.
+        * An unweighted B-spline curve appears as a green dotted line directly inside the exact red circle.
         * This visually highlights why rational weights are required for true conics: without weights, the polynomial B-spline sags inward at the corners.
    3. Weight Manipulation & Local Control:
       - Uncheck "Show B-spline".

@@ -105,11 +105,11 @@ class MainWindow(QMainWindow):
             self._bspline_tab._clear_points()
             self.set_status("Cleared B-Spline control points")
         elif curr_idx == 3:
-            self._nurbs_curve_tab._clear_points()
+            self._nurbs_curve_tab.reset()
             self.set_status("Cleared NURBS Curve data")
         elif curr_idx == 4:
-            self._nurbs_surface_tab._resize_table()
-            self.set_status("Reset NURBS Surface grid")
+            self._nurbs_surface_tab.reset()
+            self.set_status("Reset NURBS Surface to a new 3x2 control net")
 
     # Open JSON file and load into the appropriate tab
     def _file_open(self):
@@ -169,8 +169,11 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Save Error", f"Failed to save file:\n{e}")
 
-    # Switch to B-spline tab and trigger Excel export
+    # Export the rational basis from the NURBS Curve tab, otherwise the B-spline basis
     def _export_excel(self):
+        if self._tabs.currentWidget() is self._nurbs_curve_tab:
+            self._nurbs_curve_tab.export_rational_basis_excel()
+            return
         self._tabs.setCurrentWidget(self._bspline_tab)
         self._bspline_tab.export_basis_excel()
 
@@ -184,9 +187,11 @@ class MainWindow(QMainWindow):
             "  * Bezier Curves (Arbitrary degree, 2D and 3D)\n"
             "  * Bezier Surfaces (Tensor product control nets, 3D interactive view)\n"
             "  * B-Spline Curves (Cox-de Boor recursion, arbitrary knots and degrees)\n"
-            "  * NURBS Curves (Rational B-splines, exact circle demo)\n"
-            "  * NURBS Surfaces (Rational tensor-product surfaces, cylinder demo)\n"
-            "  * Excel basis matrix export\n"
+            "  * NURBS Curves (Rational B-splines, exact circle and T-profile demos,\n"
+            "    rational basis plot)\n"
+            "  * NURBS Surfaces (Rational tensor-product surfaces, cylinder and\n"
+            "    3D T-shape demos)\n"
+            "  * Excel basis matrix export (B-spline and rational NURBS)\n"
             "  * JSON geometry save/load\n\n"
             "Unified Architecture and Pure-Math Core."
         )

@@ -26,14 +26,18 @@ gui2/
 │   ├── bezier_tab.py        # 2D/3D Bézier curve tab
 │   ├── surface_tab.py       # 3D Bézier surface tab
 │   ├── bspline_tab.py       # B-spline tab with basis plot, curve draw & Excel export
-│   ├── nurbs_curve_tab.py   # NURBS curve tab with weights, B-spline overlay, circle demo
-│   └── nurbs_surface_tab.py # NURBS surface tab with weight grid, cylinder demo, rotatable 3D
-├── tests/                   # Pytest test suite (39 unit tests)
+│   ├── nurbs_curve_tab.py   # NURBS curve tab: weights, B-spline overlay, rational basis, circle & T-profile demos
+│   ├── nurbs_surface_tab.py # NURBS surface tab: weight grid, cylinder & 3D T-shape demos, rotatable 3D
+│   └── common.py            # Shared knot text formatting/parsing (lossless)
+├── tests/                   # Pytest test suite (92 tests: math, JSON and headless GUI)
 │   ├── test_bezier.py       # Partition of unity, endpoints, closed-forms, convex hull
 │   ├── test_bspline.py      # B-spline partition of unity, endpoints, Matlab reference
 │   ├── test_knots.py        # Knot generator validation
 │   ├── test_io.py           # JSON round-trip serialization tests (including NURBS)
-│   └── test_nurbs.py        # Weights equivalence, circle/cylinder accuracy, partition of unity
+│   ├── test_nurbs.py        # Weights equivalence, circle/cylinder accuracy, partition of unity
+│   ├── test_shapes.py       # T-shape/cylinder exactness, extrusion, sampling, circle fitting
+│   ├── test_ui_nurbs.py     # Headless GUI tests for the NURBS tabs and main window
+│   └── conftest.py          # Offscreen Qt application and message-box capture
 ├── examples/                # Sample geometry JSON files
 │   ├── cubic_bezier_2d.json
 │   ├── cubic_bezier_3d.json
@@ -42,7 +46,9 @@ gui2/
 │   ├── bspline_clamped_deg3.json
 │   ├── circle.json          # 9-point exact quadratic NURBS circle
 │   ├── quarter_circle.json  # 3-point quarter circle
-│   └── cylinder.json        # Degree 2x1 extruded NURBS cylinder
+│   ├── cylinder.json        # Degree 2x1 extruded NURBS cylinder
+│   ├── t_profile.json       # Closed T cross-section (degree 2, exact rounded inner corners)
+│   └── t_shape.json         # 3D T-shape: the T profile extruded along Z (21x2 net)
 ├── Matlab/                  # Validation scripts and reference outputs (untouched)
 └── oldcode/archive/         # Legacy individual scripts preserved unmodified
 ```
@@ -105,18 +111,21 @@ python app.py
 4. **NURBS Curves (Rational B-Splines)**:
    - Positive rational weighting $w_i$ for each control point.
    - 2D and 3D curve support.
-   - Comparison overlay: "Show B-spline (all weights = 1)" checkbox to compare rational curve with standard unweighted B-spline on the same polygon.
-   - Built-in exact 9-point circle generator with status-bar radius error reporting.
+   - Comparison overlay: "Show B-spline (all weights = 1)" checkbox to compare rational curve with standard unweighted B-spline on the same polygon (2D and 3D, green dotted line).
+   - **Plot Rational Basis** button showing $R_i(u)$ (optionally with the plain $N_i(u)$ dotted), and **Export Basis to Excel** for the rational basis matrix.
+   - Built-in exact 9-point circle and T-profile examples. Whenever the drawn curve is a circle or circular arc, the status bar shows its centre, radius and maximum radius error.
 
 5. **NURBS Surfaces**:
    - Bidirectional tensor-product rational surfaces with $(M \times N)$ coordinate and weight nets.
    - Interactive rotatable 3D surface visualization.
-   - Wireframe control net display toggle.
-   - Built-in extruded cylinder generator demo.
+   - Toolbar toggles for Surface, Net Lines, Points and Equal Axes (true proportions), plus a Style Options dialog.
+   - Tables follow the Rows/Cols spin boxes automatically; **Gen Open Knots (U and V)** and **Reset Weights to 1** buttons.
+   - Built-in extruded cylinder and 3D T-shape examples. `File -> New` resets to a fresh, drawable 3x2 net.
 
 6. **File I/O**:
    - Save and open curves and surfaces using unified JSON formats (`File -> Open...` / `File -> Save As...`).
    - Supports `bezier_curve`, `bezier_surface`, `bspline_curve`, `nurbs_curve`, and `nurbs_surface`.
+   - Knot values keep full precision through Open -> Save, and broken files give clear messages (missing fields, invalid JSON with line/column, bad values).
 
 ---
 
@@ -127,8 +136,9 @@ python app.py
 2. Click on the **NURBS Curve** tab.
 3. Click the **&Load Circle Example** button. (Alternatively, use `File -> Open...` and select `examples/circle.json`).
 4. Click **&Draw Curve**.
-5. The exact circle is plotted with its control polygon. The status bar displays the exact radius error against the unit circle (maximum deviation: $\sim 2.22 \times 10^{-16}$).
-6. Check **Show B-spline (all weights = 1)** and click **&Draw Curve** to see the unweighted B-spline overlay in blue dashed lines versus the exact rational circle in red.
+5. The exact circle is plotted with its control polygon. The status bar shows, for example, `Circle: centre (0, 0), radius 1, max radius error = 4.44e-16`.
+6. Check **Show B-spline (all weights = 1)** and click **&Draw Curve** to see the unweighted B-spline overlay (green dotted) versus the exact rational circle (red).
+7. Click **Plot Rational &Basis** to see the rational basis functions $R_i(u)$; with the checkbox on, the plain $N_i(u)$ are drawn dotted for comparison.
 
 ### NURBS Cylinder Demo
 1. Launch `python main.py`.
@@ -137,6 +147,12 @@ python app.py
 4. Click **&Draw Surface**.
 5. The 3D cylinder surface is rendered with its wireframe net.
 6. Click and drag with the left mouse button directly on the plot to interactively rotate the 3D cylinder.
+
+### 3D T-Shape Demo
+1. In the **NURBS Surface** tab click **Load T-Shape Example** (or `File -> Open...` and select `examples/t_shape.json`).
+2. Click **&Draw Surface**. A T-section (flange 4 x 1, stem 1 x 3, rounded inner corners of radius 0.4) extruded to depth 1 is drawn with its 21x2 control net.
+3. The profile alone is available in the **NURBS Curve** tab via **Load T-Profile Example** (`examples/t_profile.json`).
+4. Each straight edge and each fillet is one rational quadratic piece joined by double knots, so the corners are sharp and the fillets are exact circular arcs. In code: `core.nurbs.t_profile(...)` and `core.nurbs.nurbs_t_shape(..., depth=...)`.
 
 ---
 
@@ -151,6 +167,13 @@ python app.py
 * **Toolbar Ribbon Display Options**: Moved the bulky "Line & Point Display Options" group boxes from the left control panels into the plot toolbar ribbon across Bézier, B-spline, and Surface tabs, freeing up left panel vertical space for comfortable editing.
 * **Automated Tests (`tests/test_nurbs.py`, `tests/test_io.py`)**: Added 19 new tests bringing the test suite to 39 passing unit tests.
 
+### NURBS fixes and T-shape
+* **NURBS Curve tab**: B-spline overlay now also works for 3D curves; circle detection uses a least-squares circle fit (the old check never triggered); new rational basis plot and Excel export (`File -> Export basis matrix to Excel...` exports the rational basis when the NURBS Curve tab is active).
+* **NURBS Surface tab**: `File -> New` now really resets the tab; display toggles and style options in the toolbar; tables resize automatically; equal-axis 3D view; net size up to 50x50.
+* **Core (`core/nurbs.py`)**: `extrude_curve`, `t_profile`, `nurbs_t_shape`, `sample_parameters` (sampling that always includes the knots so sharp corners are drawn exactly) and `fit_circle`. `nurbs_curve`/`nurbs_surface` accept explicit parameter values; `nurbs_surface` computes each basis once and sums with NumPy (much faster); `nurbs_cylinder` is now built with `extrude_curve`.
+* **JSON (`core/io_json.py`)**: clear errors for missing fields, invalid JSON and bad values; UTF-8 file encoding. The UI no longer rounds knots to 6 digits (`ui/common.py`).
+* **Tests**: 53 new tests (92 total), including headless GUI tests that drive the NURBS tabs and main window.
+
 ---
 
 ## Running Tests
@@ -160,4 +183,6 @@ Run the complete test suite with `pytest`:
 ```bash
 pytest -v
 ```
+
+The GUI tests run headless (`tests/conftest.py` sets `QT_QPA_PLATFORM=offscreen`), so no window opens.
 

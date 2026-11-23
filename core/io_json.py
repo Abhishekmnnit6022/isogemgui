@@ -21,6 +21,16 @@ from .validation import (
 VALID_TYPES = {"bezier_curve", "bezier_surface", "bspline_curve",
                "nurbs_curve", "nurbs_surface"}
 
+# Fields that must be present in a file of each geometry type
+REQUIRED_FIELDS = {
+    "bezier_curve": ("control_points",),
+    "bezier_surface": ("control_points",),
+    "bspline_curve": ("control_points", "knots", "degree"),
+    "nurbs_curve": ("control_points", "knots", "degree", "weights"),
+    "nurbs_surface": ("control_points", "knots_u", "knots_v",
+                      "degree_u", "degree_v", "weights"),
+}
+
 
 # Creates a list of default 1.0 weights
 def _make_weights(n: int) -> list[float]:
@@ -51,20 +61,47 @@ def save(path: str | Path, data: Dict[str, Any]) -> None:
         else:
             data["weights"] = _make_weights(len(data["control_points"]))
 
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
 
 # Load geometry from JSON file and validate
 def load(path: str | Path) -> Dict[str, Any]:
     """Reads a JSON file, verifies its geometry properties, and returns verified numpy arrays."""
-    with open(path) as f:
-        data = json.load(f)
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"File is not valid JSON (line {e.lineno}, column {e.colno}): {e.msg}."
+        ) from None
+
+    if not isinstance(data, dict):
+        raise ValueError("Geometry file must contain a JSON object at the top level.")
 
     geom_type = data.get("type")
     if geom_type not in VALID_TYPES:
-        raise ValueError(f"Unknown geometry type '{geom_type}' in file.")
+        raise ValueError(
+            f"Unknown geometry type '{geom_type}' in file. "
+            f"Expected one of: {', '.join(sorted(VALID_TYPES))}."
+        )
 
+    missing = [k for k in REQUIRED_FIELDS[geom_type] if k not in data]
+    if missing:
+        raise ValueError(
+            f"'{geom_type}' file is missing required field(s): {', '.join(missing)}."
+        )
+
+    try:
+        _validate_fields(geom_type, data)
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"Invalid '{geom_type}' data: {e}") from None
+    return data
+
+
+# Validate and normalise the fields of a loaded geometry dictionary in place
+def _validate_fields(geom_type: str, data: Dict[str, Any]) -> None:
+    """Checks each field for the given geometry type and replaces it with a validated value."""
     if geom_type == "bezier_curve":
         cp = validate_control_points(data["control_points"])
         degree = cp.shape[0] - 1
@@ -112,5 +149,3 @@ def load(path: str | Path) -> Dict[str, Any]:
         data["degree_u"] = du
         data["degree_v"] = dv
         data["weights"] = w.tolist()
-
-    return data

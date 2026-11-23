@@ -57,7 +57,7 @@ def validate_control_points(points: np.ndarray) -> np.ndarray:
             f"got shape {pts.shape}."
         )
     if pts.shape[0] < 2:
-        raise ValueError("A Bezier curve requires at least 2 control points.")
+        raise ValueError("Need at least 2 control points.")
     if pts.shape[1] not in (2, 3):
         raise ValueError(
             f"Control points must be 2-D or 3-D (columns=2 or 3), "

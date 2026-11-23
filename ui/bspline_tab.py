@@ -18,6 +18,7 @@ from matplotlib.figure import Figure
 from core.bspline import basis_matrix, bspline_curve
 from core.knots import open_uniform, uniform
 from core.validation import validate_bspline_params, validate_knots
+from ui.common import format_knots
 
 
 class BsplineTab(QWidget):
@@ -267,7 +268,7 @@ class BsplineTab(QWidget):
             )
             return
         knots = open_uniform(n_cp, deg)
-        self._knots_edit.setText(", ".join(f"{k:g}" for k in knots))
+        self._knots_edit.setText(format_knots(knots))
         self._status(f"Generated open uniform knots for {n_cp} points, degree {deg}")
 
     # Generate uniform integer knots
@@ -277,7 +278,7 @@ class BsplineTab(QWidget):
         if n_cp < deg + 1:
             n_cp = deg + 1
         knots = uniform(n_cp, deg)
-        self._knots_edit.setText(", ".join(f"{k:g}" for k in knots))
+        self._knots_edit.setText(format_knots(knots))
         self._status(f"Generated uniform knots for {n_cp} points, degree {deg}")
 
     # Add a control point from the text boxes to the table
@@ -388,7 +389,7 @@ class BsplineTab(QWidget):
         if "degree" in data:
             self._deg_spin.setValue(int(data["degree"]))
         if "knots" in data:
-            self._knots_edit.setText(", ".join(f"{k:g}" for k in data["knots"]))
+            self._knots_edit.setText(format_knots(data["knots"]))
         if "control_points" in data:
             self.set_control_points(np.array(data["control_points"]))
 
