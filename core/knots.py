@@ -41,9 +41,10 @@ def open_uniform(n_control_points: int, degree: int) -> List[float]:
 
 
 def uniform(n_control_points: int, degree: int) -> List[float]:
-    """Generate a uniform (periodic) knot vector.
+    """Generate a uniform, unclamped knot vector: 0, 1, 2, ..., n_control_points + degree.
 
-    Knots are integers 0, 1, 2, ... , n_control_points + degree.
+    The curve does not reach the first/last control point and is only defined
+    on knots[degree] .. knots[-degree-1] (see core.bspline.valid_domain).
 
     Args:
         n_control_points: Number of control points.

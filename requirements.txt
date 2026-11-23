@@ -1,7 +1,10 @@
+# Needed to run the app
 numpy
 matplotlib
 PyQt5
-scipy
-pytest
+# Excel export of basis matrices (loaded only when exporting)
 pandas
 openpyxl
+# Needed only for the test suite
+pytest
+scipy

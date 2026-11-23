@@ -1,17 +1,6 @@
-"""Application launcher entry point for CAGD Suite."""
+"""Application launcher: run `python main.py` to open IGA Designer (same as `python app.py`)."""
 
-import sys
-from PyQt5.QtWidgets import QApplication
-from app import MainWindow, apply_classic_style
-
-
-def main():
-    app = QApplication(sys.argv)
-    apply_classic_style(app)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec_())
-
+from app import main
 
 if __name__ == "__main__":
     main()

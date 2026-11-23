@@ -431,3 +431,63 @@ def fit_circle(points: np.ndarray) -> Tuple[float, float, float, float]:
         raise ValueError("Points are collinear; no circle fits them.")
     dist = np.hypot(x - cx, y - cy)
     return float(cx), float(cy), radius, float(np.max(np.abs(dist - radius)))
+
+
+# Planar benchmark geometries used in isogeometric analysis
+
+def quarter_annulus(
+    inner_radius: float = 1.0,
+    outer_radius: float = 2.0,
+) -> Tuple[np.ndarray, np.ndarray, List[float], List[float], int, int]:
+    """Planar quarter ring (z = 0) between two exact quarter circles, first quadrant.
+
+    u runs radially from the inner to the outer circle (degree 1), v runs around
+    the arc from the x-axis to the y-axis (degree 2). One element; positive Jacobian.
+
+    Returns:
+        (net, weights, knots_u, knots_v, degree_u, degree_v); net shape (2, 3, 3).
+    """
+    r1, r2 = float(inner_radius), float(outer_radius)
+    if not 0.0 < r1 < r2:
+        raise ValueError(
+            f"Quarter annulus needs 0 < inner_radius < outer_radius, got {r1} and {r2}."
+        )
+    w = math.sqrt(2.0) / 2.0
+    net = np.array([
+        [[r1, 0.0, 0.0], [r1, r1, 0.0], [0.0, r1, 0.0]],
+        [[r2, 0.0, 0.0], [r2, r2, 0.0], [0.0, r2, 0.0]],
+    ])
+    weights = np.array([[1.0, w, 1.0], [1.0, w, 1.0]])
+    return net, weights, [0.0, 0.0, 1.0, 1.0], [0.0, 0.0, 0.0, 1.0, 1.0, 1.0], 1, 2
+
+
+def plate_with_hole(
+    radius: float = 1.0,
+    length: float = 4.0,
+) -> Tuple[np.ndarray, np.ndarray, List[float], List[float], int, int]:
+    """Planar quarter of a square plate with a circular hole (classic IGA benchmark).
+
+    The plate is [-length, 0] x [0, length] with a hole of the given radius at the
+    origin. u runs along the hole from (-radius, 0) to (0, radius) (degree 2, two
+    45-degree arcs joined at u = 0.5, matched on the outside by the plate corner
+    (-length, length)); v runs straight out from the hole to the plate edge (degree 1).
+    Two elements; positive Jacobian.
+
+    Returns:
+        (net, weights, knots_u, knots_v, degree_u, degree_v); net shape (5, 2, 3).
+    """
+    R, L = float(radius), float(length)
+    if not 0.0 < R < L:
+        raise ValueError(f"Plate with hole needs 0 < radius < length, got {R} and {L}.")
+    c = math.cos(math.pi / 8.0)  # weight of each 45-degree arc's middle point
+
+    def polar(r, deg):
+        a = math.radians(deg)
+        return [r * math.cos(a), r * math.sin(a), 0.0]
+
+    inner = [polar(R, 180), polar(R / c, 157.5), polar(R, 135), polar(R / c, 112.5), polar(R, 90)]
+    outer = [[-L, 0.0, 0.0], [-L, L / 2.0, 0.0], [-L, L, 0.0], [-L / 2.0, L, 0.0], [0.0, L, 0.0]]
+    net = np.array([[inner[i], outer[i]] for i in range(5)])
+    wcol = np.array([1.0, c, 1.0, c, 1.0])
+    weights = np.column_stack([wcol, wcol])
+    return net, weights, [0.0, 0.0, 0.0, 0.5, 0.5, 1.0, 1.0, 1.0], [0.0, 0.0, 1.0, 1.0], 2, 1

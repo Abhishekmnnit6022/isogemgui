@@ -22,7 +22,6 @@ class BezierTab(QWidget):
     def __init__(self, status_callback=None):
         super().__init__()
         self._status = status_callback or (lambda msg: None)
-        self._is_3d = False
         self._has_plot = False
         self._init_ui()
 
@@ -186,6 +185,7 @@ class BezierTab(QWidget):
         splitter.setStretchFactor(1, 2)
         main.addWidget(splitter)
 
+    # Show the style dialog; redraw with the chosen style afterwards
     def _open_style_dialog(self):
         self._style_dialog.exec_()
         self._on_display_option_changed()
@@ -210,7 +210,6 @@ class BezierTab(QWidget):
             except ValueError:
                 QMessageBox.warning(self, "Input Error", "Z must be a number.")
                 return
-            self._is_3d = True
         else:
             z = None
 
@@ -236,7 +235,6 @@ class BezierTab(QWidget):
     def _clear_points(self):
         self._table.setRowCount(0)
         self._degree_label.setText("Degree: 0")
-        self._is_3d = False
 
     # Extract all control points from the table as a numpy array
     def get_control_points(self) -> np.ndarray:
@@ -264,7 +262,6 @@ class BezierTab(QWidget):
         self._table.setRowCount(0)
         cp = np.atleast_2d(cp)
         is_3d = cp.shape[1] == 3
-        self._is_3d = is_3d
         for row in cp:
             r = self._table.rowCount()
             self._table.insertRow(r)
@@ -354,8 +351,7 @@ class BezierTab(QWidget):
                 )
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
-        handles, labels = ax.get_legend_handles_labels()
-        if labels:
+        if ax.get_legend_handles_labels()[1]:  # only when something is labelled
             ax.legend()
         ax.grid(True)
         ax.set_title(f"Bezier Curve (degree {cp.shape[0] - 1})")

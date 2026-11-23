@@ -12,6 +12,8 @@ What was created:
   * core/knots.py
   * core/validation.py
   * core/io_json.py
+  * core/refinement.py   (knot insertion / h-refinement)
+  * core/analysis.py     (IGA analysis preparation and export)
   * core/__init__.py
 - ui/: A PyQt5 user interface package with tab widgets embedding Matplotlib plots.
   * ui/bezier_tab.py
@@ -19,15 +21,24 @@ What was created:
   * ui/bspline_tab.py
   * ui/nurbs_curve_tab.py
   * ui/nurbs_surface_tab.py
+  * ui/analysis_tab.py   (IGA Analysis tab)
+  * ui/widgets.py        (refinement box, knot markers, scrollable panels)
+  * ui/common.py
   * ui/__init__.py
 - app.py: The main unified desktop application with tabs, menus, and status bar.
 - main.py: Clean application launcher that starts app.py.
-- tests/: Full pytest test suite with 115 passing tests (math, JSON and headless GUI).
+- tests/: Full pytest test suite with 169 passing tests (math, JSON and headless GUI).
   * tests/test_bezier.py
   * tests/test_bspline.py
   * tests/test_knots.py
   * tests/test_io.py
   * tests/test_nurbs.py
+  * tests/test_shapes.py
+  * tests/test_regressions.py
+  * tests/test_refinement_analysis.py
+  * tests/test_ui_nurbs.py
+  * tests/test_ui_iga.py
+  * tests/conftest.py
 - examples/: Sample JSON files for curves and surfaces.
   * examples/cubic_bezier_2d.json
   * examples/cubic_bezier_3d.json
@@ -37,11 +48,15 @@ What was created:
   * examples/circle.json
   * examples/quarter_circle.json
   * examples/cylinder.json
+  * examples/t_profile.json, examples/t_shape.json
+  * examples/quarter_annulus.json, examples/plate_with_hole.json (planar IGA benchmarks)
+  * examples/nurbscurve2.json, nurbscurve3.json, airfoil_nurbs_curve.json, nurbs_saddle_surface.json
+    (extra samples, moved here from the project root)
 - requirements.txt: Python package dependencies.
 - README.md: Project guide and instructions.
 
 What moved:
-- All previous scattered scripts from "B-Spline Curve/", "Bezier Curve/", and "Bezier Surface/", as well as the old launcher, were moved into the "archive/" folder so no previous work was lost.
+- All previous scattered scripts from "B-Spline Curve/", "Bezier Curve/", and "Bezier Surface/", as well as the old launcher, were first moved into "oldcode/archive/". Once all of their functionality lived in core/ and ui/, that folder was deleted in the code clean-up (it remains in the git history).
 - The "Matlab/" folder was kept completely untouched.
 
 
@@ -142,7 +157,52 @@ Functions:
 - save(path, data):
   Saves geometry dictionaries (control points, degree, knots, weights, etc.) into a JSON file.
 - load(path):
-  Reads a JSON file, validates its fields, and returns a verified dictionary with numpy arrays. Supports nurbs_curve and nurbs_surface schemas.
+  Reads a JSON file, validates its fields, and returns a verified dictionary with numpy arrays. Supports nurbs_curve and nurbs_surface schemas, and "iga_analysis_model" files exported from the IGA Analysis tab (its "geometry" is validated as a nurbs_surface; boundary conditions are checked and returned as data["conditions"]).
+
+File: core/refinement.py
+Description:
+Knot insertion (Boehm's algorithm) in homogeneous coordinates (w*x, w*y, w*z, w), so B-splines and
+NURBS are refined the same way. The geometry never changes; only control points are added.
+Functions:
+- insert_knot(knots, degree, control_points, u, times=1, weights=None):
+  Inserts u (times times) into a curve. u must lie strictly inside the valid range and its total
+  multiplicity may not exceed the degree. Returns (knots, control_points, weights or None).
+- refine_uniform(knots, degree, control_points, weights=None):
+  Splits every element in two (inserts each knot-span midpoint once).
+- insert_knot_surface(knots_u, knots_v, degree_u, degree_v, net, weights, direction, value, times=1):
+  Inserts a knot in "u" (adds a row of control points) or "v" (adds a column).
+- refine_surface_uniform(..., direction="both"): splits every element in u, v or both.
+
+File: core/analysis.py
+Description:
+IGA analysis preparation for a NURBS surface, without a solver. Control points are numbered
+index = i * n_cols + j (i along u, j along v), 0-based (1-based in the MATLAB export).
+Functions / classes:
+- surface_derivatives(ku, kv, du, dv, net, weights, u, v): S, S_u, S_v on a parameter grid
+  (rational quotient rule on the weighted sums).
+- is_planar(net), jacobian(Su, Sv, planar): signed det J = x_u y_v - x_v y_u for planar surfaces,
+  area stretch |S_u x S_v| otherwise. gauss_legendre(n), is_clamped(knots, degree).
+- analyze_surface(ku, kv, du, dv, net, weights, n_gauss_u=None, n_gauss_v=None, conditions=None)
+  -> AnalysisModel. Elements are the non-empty knot spans in u times those in v. For each element:
+  parameter ranges, the (p+1)(q+1) control points acting on it (connectivity), area by Gauss
+  quadrature (default p+1 by q+1 points), min/max Jacobian at the Gauss points and just inside
+  the corners, and a status: OK, Distorted (max|J|/min|J| > 10), Inverted (planar and
+  det J <= 0) or Degenerate (|J| almost 0, e.g. an edge collapsed to a point).
+  Also: boundary control-point sets for the edges u = 0, u = 1, v = 0, v = 1, Gauss point
+  positions, total area, and whether the knots are clamped.
+- AnalysisModel.dofs(): unknowns for a scalar field, 2D elasticity and 3D; quality_counts();
+  to_dict() (the JSON layout, type "iga_analysis_model").
+- jacobian_field(model, per_element): fine grid of points and Jacobian values for colouring.
+- element_mesh_lines(ku, kv, du, dv, net, weights): iso-curves along every element boundary.
+- export_json(model, path); export_matlab(model, path): MATLAB/Octave script with
+  geometry.form/dim/number/coefs/knots/order in the NURBS toolbox (nrbmak / GeoPDEs) layout
+  (coefs = 4 x n_u x n_v weighted coordinates), elements (ranges, 1-based connectivity, area,
+  Jacobian range, status), dofs and boundaries(k).name/control_points/condition.
+
+Also added for this feature:
+- core/bspline.py: basis_function_derivatives(knots, degree, u) and element_boundaries(knots, degree).
+- core/nurbs.py: quarter_annulus(inner_radius=1, outer_radius=2) and plate_with_hole(radius=1,
+  length=4), the classic planar IGA benchmark geometries (exact circular arcs, positive Jacobian).
 
 
 UI PACKAGE (ui/)
@@ -232,13 +292,61 @@ File: ui/common.py
 Description:
 Shared helpers: format_number() / format_knots() write values with full precision (1/3 stays 0.3333333333333333); parse_knots_text() parses and validates knot text with clear messages.
 
+Knot display and knot insertion in the curve and surface tabs:
+- B-spline and NURBS Curve tabs: a "Knots" toolbar checkbox marks every distinct knot on the curve
+  (black squares labelled u=...), and a "Refinement (Knot Insertion)" group box offers
+  Insert Knot (value + times) and Split All Elements. _insert_knot() / _split_elements()
+  call core.refinement, update the knot box and table, redraw, and report the measured
+  maximum shape change in the status bar.
+- NURBS Surface tab: a "Knots" toolbar checkbox draws the element boundaries (iso-lines at every
+  distinct knot); the status bar shows the element count in u and v.
+
+File: ui/widgets.py
+Description:
+- CurveRefinementBox: the "Refinement (Knot Insertion)" group box (knot value, times, Insert Knot,
+  Split All Elements); read_insert() returns (u, times) or raises a clear ValueError.
+- draw_knot_markers(ax, points, values, three_d): black square markers with u labels.
+- draw_polylines(ax, lines, three_d, **style): many polylines as one NaN-separated artist.
+- scrollable(panel): wraps a left control panel in a vertical scroll area.
+
+File: ui/analysis_tab.py
+Description:
+The IGA Analysis tab. Prepares a NURBS surface for isogeometric analysis (no solver). The left
+panel is a scrollable column of five numbered group boxes so each job is clearly separate:
+  Step 1 - Geometry: Use NURBS Surface Tab, Open File..., or an example (plate with a hole,
+           quarter annulus, cylinder, T-shape).
+  Step 2 - Refinement (shape is kept): split every element in U / V / both, insert a knot at a
+           value in U or V, Reset to Original Geometry. Refinement above 10000 elements is refused.
+  Step 3 - Boundary Conditions: table of the four edges (u = 0, u = 1, v = 0, v = 1) with the
+           number of control points on each and a condition combo (Free, Fixed (Dirichlet),
+           Load (Neumann), Symmetry). Selecting a row highlights the edge and its control points.
+  Step 4 - Display: element mesh, Jacobian colours, boundary conditions, element numbers,
+           control net, Gauss points.
+  Step 5 - Export: Export JSON... and Export MATLAB (.m)...
+The right side shows the plot (2D for planar surfaces, 3D otherwise) above a results area with a
+"Summary" tab (monospaced text) and an "Elements" table (click a row to outline the element and
+its control points; the Status cell is coloured).
+Functions / Methods:
+- set_geometry(net, weights, knots_u, knots_v, degree_u, degree_v, source, conditions=None):
+  validates and loads a new starting geometry.
+- _load_from_surface_tab(), _open_file(path=None), _load_example(): Step 1 sources.
+- _split(direction), _insert(), _reset_refinement(): Step 2.
+- _on_condition_changed(), _on_edge_selected(), _on_element_selected(): Step 3 and selection.
+- _rebuild(): runs core.analysis.analyze_surface and refreshes labels, tables, summary and plot.
+- summary_text(): the Summary text.
+- _draw(): Jacobian colouring, mesh lines, flagged elements, control net, Gauss points,
+  boundary conditions, element numbers and highlight.
+- export_json(path=None), export_matlab(path=None): Step 5.
+- get_data() / set_data(data) / reset(): File -> Save As / Open / New integration
+  (type "iga_analysis_model").
+
 APPLICATION ENTRY POINTS
 
 File: app.py
 Description:
-The main window of the unified application. Contains the tab widget hosting 5 tabs (BezierTab, SurfaceTab, BsplineTab, NurbsCurveTab, and NurbsSurfaceTab), the top menu bar, and the status bar.
+The main window of the unified application. Contains the tab widget hosting 6 tabs (BezierTab, SurfaceTab, BsplineTab, NurbsCurveTab, NurbsSurfaceTab and AnalysisTab "IGA Analysis"), the top menu bar, and the status bar. The IGA Analysis tab reads the NURBS Surface tab's geometry through NurbsSurfaceTab.get_data.
 Functions / Methods:
-- MainWindow.__init__(): Initializes the window, status bar, 5 tabs, and menu bar.
+- MainWindow.__init__(): Initializes the window, status bar, 6 tabs, and menu bar.
 - set_status(message): Updates the status bar at the bottom of the window.
 - _create_menu_bar(): Sets up File (New, Open, Save As, Export Excel, Exit) and Help (About).
 - _file_new(): Clears the currently active tab.
@@ -305,6 +413,29 @@ File: tests/test_nurbs.py
 - test_invalid_surface_weights(): Tests ValueError when 2D weights grid does not match surface control net.
 - test_nurbs_curve_3d(): Tests 3D NURBS curve evaluation.
 
+File: tests/test_refinement_analysis.py (core, no GUI)
+- Basis derivatives against finite differences; element_boundaries.
+- Knot insertion keeps B-spline, NURBS circle and 3D curves unchanged (to 1e-12 or better),
+  multiple insertions, and clear errors (outside the range, too many repeats, not a number).
+- Split All Elements on curves; surface insertion in u and v and uniform refinement keep the
+  T-shape, plate with a hole, quarter annulus and cylinder unchanged.
+- Analysis: quarter annulus connectivity/DOFs/boundaries/Gauss points and exact area 3*pi/4;
+  plate with a hole area 16 - pi/4, refinement to 8 x 4 elements, every control point used;
+  cylinder lateral area 4*pi; Inverted / Degenerate / Distorted flags; surface derivatives
+  against finite differences; condition validation.
+- Export: JSON reloads with conditions; broken model files are rejected clearly; the MATLAB
+  script has the NURBS toolbox coefs layout, 1-based connectivity, boundaries and DOFs.
+
+File: tests/test_ui_iga.py (headless GUI)
+- Knots checkbox markers lie exactly on the B-spline curve; insert / split in the B-spline and
+  NURBS Curve tabs keep the shape (circle radius error stays ~1e-16) with clear error dialogs.
+- NURBS Surface Knots checkbox draws element boundaries.
+- IGA Analysis: empty-state guidance; plate workflow (load example -> split -> insert knot ->
+  tag edges -> display options -> select edge and element -> export JSON and MATLAB ->
+  File -> New -> File -> Open restores the same model and conditions); reset refinement;
+  Use NURBS Surface Tab (and its error message); inverted elements coloured red; wrong file
+  types rejected; element limit; File -> Save As from the tab; every example loads and draws.
+
 
 ================================================================================
 3. WHAT LOGIC CHANGED FROM PREVIOUS CODE
@@ -368,29 +499,27 @@ The underlying mathematical formulas remain identical:
 
 
 ================================================================================
-5. WHICH FILES CAN BE SAFELY DELETED
+5. CLEAN-UP STATUS AND FILES THAT MUST STAY
 ================================================================================
 
-You can SAFELY DELETE the following:
+Removed during the code clean-up:
+- oldcode/ (the legacy individual scripts: "B-Spline Curve/", "Bezier Curve/", "Bezier Surface/"
+  and main_launcher.py). Everything they did is in core/ and ui/. They are still available in
+  the git history (commit c91f00e and earlier) if ever needed.
+- Unused imports, an unused alias (CAGDApp), an unused attribute (BezierTab._is_3d) and the
+  duplicated start-up code in main.py (it now simply calls app.main()).
+- The loose sample files in the project root were moved into examples/.
 
-1. Everything inside the "oldcode/archive/" directory:
-   - oldcode/archive/B-Spline Curve/ (all files in this folder)
-   - oldcode/archive/Bezier Curve/ (all files in this folder)
-   - oldcode/archive/Bezier Surface/ (all files in this folder)
-   - oldcode/archive/main_launcher.py
-   (All functionality from these files is now fully incorporated into core/ and ui/.)
-
-2. Temporary cache and audit directories:
-   - verify_output/ (temporary headless GUI test screenshots generated by verify_project.py)
-   - verify_report.txt (audit log generated by verify_project.py)
-   - .pytest_cache/
-   - __pycache__/ (and any __pycache__ inside core/, ui/, tests/)
+Generated files (ignored by git, safe to delete at any time, they are recreated on demand):
+   - verify_output/ and verify_report.txt (written by verify_project.py)
+   - .pytest_cache/ and every __pycache__/ folder
 
 FILES YOU MUST NOT DELETE:
 - main.py (starts the application)
 - app.py (main desktop window)
-- core/ (entire folder: bezier.py, bspline.py, nurbs.py, knots.py, validation.py, io_json.py, __init__.py)
-- ui/ (entire folder: bezier_tab.py, surface_tab.py, bspline_tab.py, nurbs_curve_tab.py, nurbs_surface_tab.py, __init__.py)
+- core/ (entire folder: bezier.py, bspline.py, nurbs.py, knots.py, validation.py, refinement.py, analysis.py, io_json.py, __init__.py)
+- ui/ (entire folder: one module per tab, analysis_tab.py, widgets.py, common.py, __init__.py)
+- verify_project.py (the independent audit script; kept unmodified)
 - tests/ (entire folder: unit tests)
 - examples/ (sample JSON files)
 - Matlab/ (your original validation scripts)
@@ -446,7 +575,7 @@ FILES YOU MUST NOT DELETE:
    - What Could Not Be Verified by verify_project.py:
      * Check: "archive/ keeps old scripts"
      * Result: FAIL (archive/ has 0 .py files, old scripts should be kept (>= 10))
-     * Explanation: In this repository layout, the archive of legacy scripts resides in the subfolder "oldcode/archive/" instead of "archive/" directly at the repository root. Per the project constraints ("Do not modify verify_project.py, oldcode/, or Matlab/"), neither the audit script nor the oldcode directory path was altered. All other 70 structure, mathematical, validation, JSON, and headless GUI checks passed successfully.
+     * Explanation: verify_project.py expects a root "archive/" folder of legacy scripts. The legacy scripts were first kept in "oldcode/archive/" and have since been deleted in the code clean-up (they remain in the git history), so this one check is expected to fail. verify_project.py itself is kept unmodified. All other 70 structure, mathematical, validation, JSON, and headless GUI checks pass.
 
 
 7.2 NUMERICAL PRECISION & EXACT CONIC GEOMETRY

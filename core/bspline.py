@@ -155,3 +155,43 @@ def bspline_curve(
         u = np.asarray(u_values, dtype=float)
     N = basis_functions(knots_list, degree, u)  # (n_cp, len(u))
     return N.T @ cp
+
+
+# Basis functions and their first derivatives dN_{i,p}/du at many parameters
+def basis_function_derivatives(
+    knots: Sequence[float], degree: int, u: Sequence[float]
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Returns (N, dN), both of shape (len(knots) - degree - 1, len(u)).
+
+    Uses the standard formula
+        dN_{i,p}/du = p * ( N_{i,p-1} / (u_{i+p} - u_i) - N_{i+1,p-1} / (u_{i+p+1} - u_{i+1}) )
+    with 0/0 treated as 0. At a knot the right-hand span is used, like basis_functions().
+    """
+    k = np.asarray(validate_knots(knots), dtype=float)
+    p = validate_degree(degree)
+    u = np.atleast_1d(np.asarray(u, dtype=float))
+    N = basis_functions(k, p, u)
+    dN = np.zeros_like(N)
+    if p == 0:
+        return N, dN
+    lower = basis_functions(k, p - 1, u)  # one more function than N
+    for i in range(N.shape[0]):
+        d1 = k[i + p] - k[i]
+        d2 = k[i + p + 1] - k[i + 1]
+        if d1 != 0.0:
+            dN[i] += p / d1 * lower[i]
+        if d2 != 0.0:
+            dN[i] -= p / d2 * lower[i + 1]
+    return N, dN
+
+
+# Distinct knot values inside the valid range: the element (knot span) boundaries
+def element_boundaries(knots: Sequence[float], degree: int) -> np.ndarray:
+    """Sorted distinct knots in [knots[p], knots[-p-1]].
+
+    Consecutive values bound one element (a non-empty knot span), so the number
+    of elements is len(result) - 1.
+    """
+    start, end = valid_domain(knots, degree)
+    k = np.asarray(validate_knots(knots), dtype=float)
+    return np.unique(k[(k >= start) & (k <= end)])

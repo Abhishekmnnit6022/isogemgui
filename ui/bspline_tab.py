@@ -14,10 +14,12 @@ from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
 
-from core.bspline import basis_matrix, bspline_curve, valid_domain
+from core.bspline import basis_matrix, bspline_curve, element_boundaries, valid_domain
+from core.refinement import insert_knot, refine_uniform
 from core.knots import open_uniform, uniform
 from core.validation import validate_bspline_params
 from ui.common import check_spin_value, format_knots, parse_knots_text, read_cell_float
+from ui.widgets import CurveRefinementBox, draw_knot_markers, element_count_text, scrollable
 
 
 class BsplineTab(QWidget):
@@ -27,6 +29,7 @@ class BsplineTab(QWidget):
         super().__init__()
         self._status = status_callback or (lambda msg: None)
         self._last_plot: Optional[str] = None  # "basis" or "curve", whatever is shown now
+        self._last_status = ""
         self._init_ui()
         self._load_matlab_preset()
 
@@ -102,6 +105,7 @@ class BsplineTab(QWidget):
         cp_layout.addLayout(cp_btn_row)
 
         self._table = QTableWidget(0, 3)
+        self._table.setMinimumHeight(150)
         self._table.setHorizontalHeaderLabels(["X", "Y", "Z"])
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         cp_layout.addWidget(self._table)
@@ -113,6 +117,9 @@ class BsplineTab(QWidget):
         cp_layout.addLayout(preset_row)
 
         left.addWidget(cp_group)
+
+        self._refine_box = CurveRefinementBox(self._insert_knot, self._split_elements)
+        left.addWidget(self._refine_box)
 
         draw_btn = QPushButton("Draw Curve")
         draw_btn.clicked.connect(self._draw_curve)
@@ -211,6 +218,12 @@ class BsplineTab(QWidget):
         self._show_curve_chk.stateChanged.connect(self._on_display_option_changed)
         self._toolbar.addWidget(self._show_curve_chk)
 
+        self._show_knots_chk = QCheckBox("Knots")
+        self._show_knots_chk.setChecked(False)
+        self._show_knots_chk.setToolTip("Mark the knots (element boundaries) on the curve")
+        self._show_knots_chk.stateChanged.connect(self._on_display_option_changed)
+        self._toolbar.addWidget(self._show_knots_chk)
+
         self._toolbar.addSeparator()
         self._style_btn = QToolButton(self._toolbar)
         self._style_btn.setText("Style Options...")
@@ -225,12 +238,13 @@ class BsplineTab(QWidget):
         right_widget.setLayout(right)
 
         splitter = QSplitter(Qt.Horizontal)
-        splitter.addWidget(left_widget)
+        splitter.addWidget(scrollable(left_widget))
         splitter.addWidget(right_widget)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 2)
         main.addWidget(splitter)
 
+    # Show the style dialog; redraw with the chosen style afterwards
     def _open_style_dialog(self):
         self._style_dialog.exec_()
         self._on_display_option_changed()
@@ -482,13 +496,60 @@ class BsplineTab(QWidget):
 
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
+        bounds = element_boundaries(knots, deg)
+        if self._show_knots_chk.isChecked():
+            knot_pts = bspline_curve(knots, deg, cp, u_values=bounds)
+            draw_knot_markers(ax, knot_pts, bounds, dim == 3)
+
         ax.set_title(f"B-Spline Curve (degree {deg}, {cp.shape[0]} control points)")
-        handles, labels = ax.get_legend_handles_labels()
-        if labels:
+        if ax.get_legend_handles_labels()[1]:  # only when something is labelled
             ax.legend()
         ax.grid(True)
         self._canvas.draw()
-        self._status(f"Curve drawn: degree {deg}, {cp.shape[0]} control points")
+        self._last_status = (f"Curve drawn: degree {deg}, {cp.shape[0]} control points, "
+                             f"{element_count_text(len(bounds) - 1)}")
+        self._status(self._last_status)
+
+    # Read the curve currently described by the knot box and the table
+    def _read_curve(self):
+        knots = self.parse_knots()
+        deg = self._deg_spin.value()
+        cp = self.get_control_points()
+        validate_bspline_params(knots, deg, cp.shape[0])
+        return knots, deg, cp
+
+    # Replace the curve with a refined one, redraw, and report that the shape is unchanged
+    def _apply_refinement(self, old, new_knots, new_cp, action: str):
+        knots, deg, cp = old
+        u = np.linspace(*valid_domain(knots, deg), 400)
+        change = float(np.max(np.abs(bspline_curve(knots, deg, cp, u_values=u)
+                                     - bspline_curve(new_knots, deg, new_cp, u_values=u))))
+        self._knots_edit.setText(format_knots(new_knots))
+        self.set_control_points(new_cp)
+        self._draw_curve()
+        self._status(f"{action}: {cp.shape[0]} -> {new_cp.shape[0]} control points, "
+                     f"max shape change {change:.1e}  |  {self._last_status}")
+
+    # Insert the knot typed in the Refinement box
+    def _insert_knot(self):
+        try:
+            old = self._read_curve()
+            u, times = self._refine_box.read_insert()
+            new_knots, new_cp, _ = insert_knot(old[0], old[1], old[2], u, times)
+        except Exception as e:
+            QMessageBox.warning(self, "Insert Knot", str(e))
+            return
+        self._apply_refinement(old, new_knots, new_cp, f"Inserted knot u={u:g} ({times}x)")
+
+    # Split every element in two
+    def _split_elements(self):
+        try:
+            old = self._read_curve()
+            new_knots, new_cp, _ = refine_uniform(old[0], old[1], old[2])
+        except Exception as e:
+            QMessageBox.warning(self, "Split All Elements", str(e))
+            return
+        self._apply_refinement(old, new_knots, new_cp, "Split all elements")
 
     # Export calculated basis function matrix to Excel spreadsheet
     def export_basis_excel(self, filepath: Optional[str] = None):

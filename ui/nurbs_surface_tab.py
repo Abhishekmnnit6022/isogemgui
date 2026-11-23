@@ -12,12 +12,14 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
-from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 
+from core.analysis import element_mesh_lines
+from core.bspline import element_boundaries
 from core.knots import open_uniform
 from core.nurbs import nurbs_surface, nurbs_cylinder, nurbs_t_shape, sample_parameters
 from core.validation import validate_bspline_params
 from ui.common import check_spin_value, format_knots, format_number, parse_knots_text
+from ui.widgets import draw_polylines, scrollable
 
 DEFAULT_ROWS = 3
 DEFAULT_COLS = 2
@@ -69,13 +71,13 @@ class NurbsSurfaceTab(QWidget):
         param_layout = QVBoxLayout(param_group)
 
         deg_row = QHBoxLayout()
-        deg_row.addWidget(QLabel("Degree &U:"))
+        deg_row.addWidget(QLabel("Degree U:"))
         self._deg_u_spin = QSpinBox()
         self._deg_u_spin.setRange(1, 15)
         self._deg_u_spin.setValue(DEFAULT_DEG_U)
         deg_row.addWidget(self._deg_u_spin)
 
-        deg_row.addWidget(QLabel("Degree &V:"))
+        deg_row.addWidget(QLabel("Degree V:"))
         self._deg_v_spin = QSpinBox()
         self._deg_v_spin.setRange(1, 15)
         self._deg_v_spin.setValue(DEFAULT_DEG_V)
@@ -103,6 +105,7 @@ class NurbsSurfaceTab(QWidget):
         coord_group = QGroupBox("Control Net Coordinates")
         coord_layout = QVBoxLayout(coord_group)
         self._coord_table = QTableWidget(0, 5)
+        self._coord_table.setMinimumHeight(130)
         self._coord_table.setHorizontalHeaderLabels(["Row (i)", "Col (j)", "X", "Y", "Z"])
         self._coord_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         coord_layout.addWidget(self._coord_table)
@@ -112,6 +115,7 @@ class NurbsSurfaceTab(QWidget):
         wt_group = QGroupBox("Weights")
         wt_layout = QVBoxLayout(wt_group)
         self._wt_table = QTableWidget(0, 3)
+        self._wt_table.setMinimumHeight(110)
         self._wt_table.setHorizontalHeaderLabels(["Row (i)", "Col (j)", "Weight"])
         self._wt_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         wt_layout.addWidget(self._wt_table)
@@ -172,6 +176,11 @@ class NurbsSurfaceTab(QWidget):
         self._equal_axes_chk.stateChanged.connect(self._on_display_option_changed)
         self._toolbar.addWidget(self._equal_axes_chk)
 
+        self._show_knots_chk = QCheckBox("Knots")
+        self._show_knots_chk.setToolTip("Draw the element boundaries (lines at every distinct knot)")
+        self._show_knots_chk.stateChanged.connect(self._on_display_option_changed)
+        self._toolbar.addWidget(self._show_knots_chk)
+
         self._toolbar.addSeparator()
         self._style_btn = QToolButton(self._toolbar)
         self._style_btn.setText("Style Options...")
@@ -186,7 +195,7 @@ class NurbsSurfaceTab(QWidget):
         right_widget.setLayout(right)
 
         splitter = QSplitter(Qt.Horizontal)
-        splitter.addWidget(left_widget)
+        splitter.addWidget(scrollable(left_widget))
         splitter.addWidget(right_widget)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 2)
@@ -258,6 +267,7 @@ class NurbsSurfaceTab(QWidget):
         dlg_btn_row.addWidget(close_btn)
         dlg_layout.addLayout(dlg_btn_row)
 
+    # Show the style dialog (changes redraw immediately)
     def _open_style_dialog(self):
         self._style_dialog.exec_()
 
@@ -480,6 +490,7 @@ class NurbsSurfaceTab(QWidget):
         nu, nv, _ = net.shape
         self._figure.clear()
         ax = self._figure.add_subplot(111, projection="3d")
+        ax.computed_zorder = False  # draw in call order so knot lines stay visible on the surface
 
         if self._show_surface_chk.isChecked():
             ax.plot_surface(X, Y, Z,
@@ -515,6 +526,10 @@ class NurbsSurfaceTab(QWidget):
                     linewidth=self._line_width_spin.value(), alpha=0.8,
                     label="Control net lines")
 
+        if self._show_knots_chk.isChecked():
+            draw_polylines(ax, element_mesh_lines(ku, kv, du, dv, net, w), True,
+                           color="black", linewidth=1.2, label="Element boundaries")
+
         if self._equal_axes_chk.isChecked():
             pts = np.concatenate([net.reshape(-1, 3),
                                   np.column_stack([X.ravel(), Y.ravel(), Z.ravel()])])
@@ -532,9 +547,11 @@ class NurbsSurfaceTab(QWidget):
         ax.set_ylabel("Y")
         ax.set_zlabel("Z")
         ax.set_title(f"NURBS Surface (deg {du}x{dv}, {nu}x{nv} net)")
-        handles, labels = ax.get_legend_handles_labels()
-        if labels:
+        if ax.get_legend_handles_labels()[1]:  # only when something is labelled
             ax.legend()
         self._canvas.draw()
         self._has_plot = True
-        self._status(f"NURBS surface drawn: degree {du}x{dv}, {nu}x{nv} control net")
+        neu = len(element_boundaries(ku, du)) - 1
+        nev = len(element_boundaries(kv, dv)) - 1
+        self._status(f"NURBS surface drawn: degree {du}x{dv}, {nu}x{nv} control net, "
+                     f"{neu} element(s) in u x {nev} in v = {neu * nev}")

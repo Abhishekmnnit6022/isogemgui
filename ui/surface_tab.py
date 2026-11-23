@@ -11,7 +11,6 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
-from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 
 from core.bezier import bezier_surface
 from core.validation import validate_surface_net
@@ -198,6 +197,7 @@ class SurfaceTab(QWidget):
         splitter.setStretchFactor(1, 2)
         main.addWidget(splitter)
 
+    # Show the style dialog; redraw with the chosen style afterwards
     def _open_style_dialog(self):
         self._style_dialog.exec_()
         self._on_display_option_changed()
@@ -396,8 +396,7 @@ class SurfaceTab(QWidget):
         ax.set_ylabel("Y")
         ax.set_zlabel("Z")
         ax.set_title(f"Bezier Surface (degree {nu - 1} x {nv - 1})")
-        handles, labels = ax.get_legend_handles_labels()
-        if labels:
+        if ax.get_legend_handles_labels()[1]:  # only when something is labelled
             ax.legend()
         self._canvas.draw()
         self._status(f"Surface drawn: degree {nu-1}x{nv-1}, {nu}x{nv} control net")

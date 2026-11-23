@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from math import comb
-from typing import Optional
 import numpy as np
 
 from .validation import validate_control_points, validate_surface_net

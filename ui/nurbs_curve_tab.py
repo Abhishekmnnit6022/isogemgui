@@ -18,9 +18,11 @@ from core.nurbs import (
     nurbs_curve, nurbs_circle, t_profile, rational_basis_matrix,
     sample_parameters, fit_circle,
 )
-from core.bspline import bspline_curve, basis_matrix
+from core.bspline import bspline_curve, basis_matrix, element_boundaries, valid_domain
+from core.refinement import insert_knot, refine_uniform
 from core.validation import validate_bspline_params
 from ui.common import check_spin_value, format_knots, format_number, parse_knots_text
+from ui.widgets import CurveRefinementBox, draw_knot_markers, element_count_text, scrollable
 
 
 class NurbsCurveTab(QWidget):
@@ -29,6 +31,8 @@ class NurbsCurveTab(QWidget):
     def __init__(self, status_callback=None):
         super().__init__()
         self._status = status_callback or (lambda msg: None)
+        self._has_curve = False   # True while the plot shows the curve (not the basis)
+        self._last_status = ""
         self._init_ui()
 
     # Build the user interface
@@ -42,7 +46,7 @@ class NurbsCurveTab(QWidget):
         param_layout = QVBoxLayout(param_group)
 
         deg_row = QHBoxLayout()
-        deg_row.addWidget(QLabel("&Degree:"))
+        deg_row.addWidget(QLabel("Degree:"))
         self._deg_spin = QSpinBox()
         self._deg_spin.setRange(1, 15)
         self._deg_spin.setValue(2)
@@ -83,6 +87,7 @@ class NurbsCurveTab(QWidget):
         cp_layout.addLayout(btn_row)
 
         self._table = QTableWidget(0, 4)
+        self._table.setMinimumHeight(150)
         self._table.setHorizontalHeaderLabels(["X", "Y", "Z", "W"])
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         cp_layout.addWidget(self._table)
@@ -98,6 +103,9 @@ class NurbsCurveTab(QWidget):
         cp_layout.addLayout(example_row)
 
         left.addWidget(cp_group)
+
+        self._refine_box = CurveRefinementBox(self._insert_knot, self._split_elements)
+        left.addWidget(self._refine_box)
 
         # Options
         opt_group = QGroupBox("Display Options")
@@ -124,6 +132,11 @@ class NurbsCurveTab(QWidget):
         self._figure = Figure()
         self._canvas = FigureCanvasQTAgg(self._figure)
         self._toolbar = NavigationToolbar2QT(self._canvas, self)
+        self._toolbar.addSeparator()
+        self._show_knots_chk = QCheckBox("Knots")
+        self._show_knots_chk.setToolTip("Mark the knots (element boundaries) on the curve")
+        self._show_knots_chk.stateChanged.connect(self._on_display_option_changed)
+        self._toolbar.addWidget(self._show_knots_chk)
         right.addWidget(self._toolbar)
         right.addWidget(self._canvas)
 
@@ -131,7 +144,7 @@ class NurbsCurveTab(QWidget):
         right_widget.setLayout(right)
 
         splitter = QSplitter(Qt.Horizontal)
-        splitter.addWidget(left_widget)
+        splitter.addWidget(scrollable(left_widget))
         splitter.addWidget(right_widget)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 2)
@@ -166,6 +179,7 @@ class NurbsCurveTab(QWidget):
         self._knots_edit.clear()
         self._deg_spin.setValue(2)
         self._show_bspline_chk.setChecked(False)
+        self._has_curve = False
         self._figure.clear()
         self._canvas.draw()
 
@@ -274,7 +288,7 @@ class NurbsCurveTab(QWidget):
     # Plot the rational basis functions R_i(u)
     def _plot_rational_basis(self):
         try:
-            knots, degree, cp, w = self._read_inputs()
+            knots, degree, _, w = self._read_inputs()
             u, R = rational_basis_matrix(knots, degree, w, n_eval=400)
         except Exception as e:
             QMessageBox.warning(self, "Error", str(e))
@@ -293,6 +307,7 @@ class NurbsCurveTab(QWidget):
 
         ax.set_xlabel("Parameter u")
         ax.set_ylabel("Basis value")
+        self._has_curve = False
         ax.set_title(f"NURBS Rational Basis Functions (degree {degree}, {R.shape[0]} functions)")
         ax.grid(True)
         if R.shape[0] <= 12:
@@ -305,7 +320,7 @@ class NurbsCurveTab(QWidget):
     def export_rational_basis_excel(self, filepath: Optional[str] = None):
         """Export R_i(u) over the knot range to an Excel workbook (one column per function)."""
         try:
-            knots, degree, cp, w = self._read_inputs()
+            knots, degree, _, w = self._read_inputs()
             u, R = rational_basis_matrix(knots, degree, w, n_eval=200)
         except Exception as e:
             QMessageBox.warning(self, "Export Error", f"Cannot compute rational basis matrix:\n{e}")
@@ -330,14 +345,20 @@ class NurbsCurveTab(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Export Error", f"Failed to save Excel file:\n{e}")
 
-    # Draw the NURBS curve
-    def _draw(self):
+    # Redraw quietly when a display option changes, but only while the curve is shown
+    def _on_display_option_changed(self, *_):
+        if self._has_curve:
+            self._draw(silent=True)
+
+    # Draw the NURBS curve; silent=True skips the error dialog
+    def _draw(self, silent: bool = False):
         try:
             knots, degree, cp, w = self._read_inputs()
             u_vals = sample_parameters(knots, 400, degree)
             curve = nurbs_curve(knots, degree, cp, w, u_values=u_vals)
         except Exception as e:
-            QMessageBox.warning(self, "Error", str(e))
+            if not silent:
+                QMessageBox.warning(self, "Error", str(e))
             return
 
         overlay = None
@@ -383,16 +404,57 @@ class NurbsCurveTab(QWidget):
                         label="B-spline (w=1)")
             ax.set_aspect("equal", adjustable="datalim")
 
+        bounds = element_boundaries(knots, degree)
+        if self._show_knots_chk.isChecked():
+            knot_pts = nurbs_curve(knots, degree, cp, w, u_values=bounds)
+            draw_knot_markers(ax, knot_pts, bounds, dim == 3)
+
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
         ax.set_title(f"NURBS Curve (degree {degree}, {cp.shape[0]} pts)")
-        handles, labels = ax.get_legend_handles_labels()
-        if labels:
+        if ax.get_legend_handles_labels()[1]:  # only when something is labelled
             ax.legend()
         ax.grid(True)
         self._canvas.draw()
+        self._has_curve = True
 
-        self._status(self._curve_status(curve, degree, cp.shape[0]))
+        status = self._curve_status(curve, degree, cp.shape[0])
+        parts = status.split("  |  ", 1)
+        parts[0] += f", {element_count_text(len(bounds) - 1)}"
+        self._last_status = "  |  ".join(parts)
+        self._status(self._last_status)
+
+    # Replace the curve with a refined one, redraw, and report that the shape is unchanged
+    def _apply_refinement(self, old, new_knots, new_cp, new_w, action: str):
+        knots, degree, cp, w = old
+        u = np.linspace(*valid_domain(knots, degree), 400)
+        change = float(np.max(np.abs(nurbs_curve(knots, degree, cp, w, u_values=u)
+                                     - nurbs_curve(new_knots, degree, new_cp, new_w, u_values=u))))
+        self._fill(new_cp, new_w, new_knots, degree)
+        self._draw()
+        self._status(f"{action}: {cp.shape[0]} -> {new_cp.shape[0]} control points, "
+                     f"max shape change {change:.1e}  |  {self._last_status}")
+
+    # Insert the knot typed in the Refinement box
+    def _insert_knot(self):
+        try:
+            old = self._read_inputs()
+            u, times = self._refine_box.read_insert()
+            new_knots, new_cp, new_w = insert_knot(old[0], old[1], old[2], u, times, weights=old[3])
+        except Exception as e:
+            QMessageBox.warning(self, "Insert Knot", str(e))
+            return
+        self._apply_refinement(old, new_knots, new_cp, new_w, f"Inserted knot u={u:g} ({times}x)")
+
+    # Split every element in two
+    def _split_elements(self):
+        try:
+            old = self._read_inputs()
+            new_knots, new_cp, new_w = refine_uniform(old[0], old[1], old[2], old[3])
+        except Exception as e:
+            QMessageBox.warning(self, "Split All Elements", str(e))
+            return
+        self._apply_refinement(old, new_knots, new_cp, new_w, "Split all elements")
 
     # Status text, including the radius error when the curve is a circle or circular arc
     @staticmethod

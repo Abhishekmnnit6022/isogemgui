@@ -76,7 +76,6 @@ def validate_bspline_params(
     Raises:
         ValueError: with a readable message on mismatch.
     """
-    m = len(knots) - 1
     n = n_control_points - 1
     p = degree
     expected_knots = n + p + 1 + 1  # m+1

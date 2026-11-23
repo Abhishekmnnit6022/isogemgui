@@ -19,7 +19,7 @@ from .validation import (
 )
 
 VALID_TYPES = {"bezier_curve", "bezier_surface", "bspline_curve",
-               "nurbs_curve", "nurbs_surface"}
+               "nurbs_curve", "nurbs_surface", "iga_analysis_model"}
 
 # Fields that must be present in a file of each geometry type
 REQUIRED_FIELDS = {
@@ -29,6 +29,8 @@ REQUIRED_FIELDS = {
     "nurbs_curve": ("control_points", "knots", "degree", "weights"),
     "nurbs_surface": ("control_points", "knots_u", "knots_v",
                       "degree_u", "degree_v", "weights"),
+    # Exported from the IGA Analysis tab: a nurbs_surface plus boundary conditions
+    "iga_analysis_model": ("geometry",),
 }
 
 
@@ -52,7 +54,9 @@ def save(path: str | Path, data: Dict[str, Any]) -> None:
         if key in data and isinstance(data[key], np.ndarray):
             data[key] = data[key].tolist()
 
-    if "weights" not in data or data["weights"] is None:
+    if geom_type == "iga_analysis_model":
+        pass  # weights live inside data["geometry"]
+    elif "weights" not in data or data["weights"] is None:
         if geom_type == "bezier_surface":
             net = np.asarray(data["control_points"])
             data["weights"] = _make_weights(int(net.size // 3))
@@ -102,6 +106,27 @@ def load(path: str | Path) -> Dict[str, Any]:
 # Validate and normalise the fields of a loaded geometry dictionary in place
 def _validate_fields(geom_type: str, data: Dict[str, Any]) -> None:
     """Checks each field for the given geometry type and replaces it with a validated value."""
+    if geom_type == "iga_analysis_model":
+        from .analysis import CONDITIONS, EDGE_NAMES  # local import: analysis imports validation only
+        geom = data["geometry"]
+        if not isinstance(geom, dict):
+            raise ValueError("'geometry' must be a JSON object holding a nurbs_surface.")
+        missing = [k for k in REQUIRED_FIELDS["nurbs_surface"] if k not in geom]
+        if missing:
+            raise ValueError(f"geometry is missing required field(s): {', '.join(missing)}.")
+        _validate_fields("nurbs_surface", geom)
+        geom["type"] = "nurbs_surface"
+        conditions = {}
+        for name, info in (data.get("boundaries") or {}).items():
+            cond = info.get("condition", "Free") if isinstance(info, dict) else info
+            if name not in EDGE_NAMES:
+                raise ValueError(f"unknown boundary edge '{name}' (expected one of {', '.join(EDGE_NAMES)}).")
+            if cond not in CONDITIONS:
+                raise ValueError(f"unknown boundary condition '{cond}' (expected one of {', '.join(CONDITIONS)}).")
+            conditions[name] = cond
+        data["conditions"] = conditions
+        return
+
     if geom_type == "bezier_curve":
         cp = validate_control_points(data["control_points"])
         degree = cp.shape[0] - 1

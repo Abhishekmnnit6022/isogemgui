@@ -10,7 +10,7 @@ import pytest
 from PyQt5.QtWidgets import QTableWidgetItem
 
 from core import io_json
-from core.nurbs import nurbs_cylinder, nurbs_t_shape, t_profile
+from core.nurbs import nurbs_cylinder, nurbs_t_shape
 from ui.common import format_knots, format_number, parse_knots_text
 
 

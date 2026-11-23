@@ -1,4 +1,8 @@
-"""Unified CAGD desktop application window."""
+"""Main window of IGA Designer: six tabs, the File/Help menus and the status bar.
+
+Each tab offers get_data() / set_data() so File -> Open / Save As work the same way
+everywhere; File -> Open picks the tab from the "type" field of the JSON file.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +12,6 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QAction, QFileDialog,
     QMessageBox, QStatusBar, QStyleFactory
 )
-from PyQt5.QtCore import Qt
 
 from core import io_json
 from ui.bezier_tab import BezierTab
@@ -16,10 +19,11 @@ from ui.surface_tab import SurfaceTab
 from ui.bspline_tab import BsplineTab
 from ui.nurbs_curve_tab import NurbsCurveTab
 from ui.nurbs_surface_tab import NurbsSurfaceTab
+from ui.analysis_tab import AnalysisTab
 
 
 class MainWindow(QMainWindow):
-    """Main window hosting Bezier, B-Spline, NURBS Curve, and NURBS Surface tabs."""
+    """Main window hosting the Bezier, B-Spline, NURBS Curve, NURBS Surface and IGA Analysis tabs."""
 
     def __init__(self):
         super().__init__()
@@ -40,12 +44,15 @@ class MainWindow(QMainWindow):
         self._bspline_tab = BsplineTab(status_callback=self.set_status)
         self._nurbs_curve_tab = NurbsCurveTab(status_callback=self.set_status)
         self._nurbs_surface_tab = NurbsSurfaceTab(status_callback=self.set_status)
+        self._analysis_tab = AnalysisTab(status_callback=self.set_status,
+                                         geometry_provider=self._nurbs_surface_tab.get_data)
 
         self._tabs.addTab(self._bezier_tab, "Bezier Curve")
         self._tabs.addTab(self._surface_tab, "Bezier Surface")
         self._tabs.addTab(self._bspline_tab, "B-Spline")
         self._tabs.addTab(self._nurbs_curve_tab, "NURBS Curve")
         self._tabs.addTab(self._nurbs_surface_tab, "NURBS Surface")
+        self._tabs.addTab(self._analysis_tab, "IGA Analysis")
 
         self._create_menu_bar()
 
@@ -110,6 +117,9 @@ class MainWindow(QMainWindow):
         elif curr_idx == 4:
             self._nurbs_surface_tab.reset()
             self.set_status("Reset NURBS Surface to a new 3x2 control net")
+        elif curr_idx == 5:
+            self._analysis_tab.reset()
+            self.set_status("Cleared the IGA Analysis model")
 
     # Open JSON file and load into the appropriate tab
     def _file_open(self):
@@ -142,6 +152,10 @@ class MainWindow(QMainWindow):
                 self._tabs.setCurrentWidget(self._nurbs_surface_tab)
                 self._nurbs_surface_tab.set_data(data)
                 self.set_status(f"Loaded NURBS surface from {Path(path).name}")
+            elif geom_type == "iga_analysis_model":
+                self._tabs.setCurrentWidget(self._analysis_tab)
+                self._analysis_tab.set_data(data, source=Path(path).name)
+                self.set_status(f"Loaded IGA analysis model from {Path(path).name}")
             else:
                 QMessageBox.warning(self, "Open File", f"Unrecognized geometry type: {geom_type}")
         except Exception as e:
@@ -191,13 +205,14 @@ class MainWindow(QMainWindow):
             "    rational basis plot)\n"
             "  * NURBS Surfaces (Rational tensor-product surfaces, cylinder and\n"
             "    3D T-shape demos)\n"
+            "  * Knot display and knot insertion (h-refinement, shape unchanged)\n"
+            "  * IGA Analysis: elements, connectivity, DOFs, boundary edges,\n"
+            "    Jacobian mesh-quality check, Gauss points, JSON/MATLAB export\n"
+            "    (no solver)\n"
             "  * Excel basis matrix export (B-spline and rational NURBS)\n"
             "  * JSON geometry save/load\n\n"
             "Unified Architecture and Pure-Math Core."
         )
-
-
-CAGDApp = MainWindow
 
 
 # Apply classic Windows style
@@ -207,6 +222,7 @@ def apply_classic_style(app: QApplication):
         app.setStyle(windows_style)
 
 
+# Start the Qt application and show the main window
 def main():
     app = QApplication(sys.argv)
     apply_classic_style(app)

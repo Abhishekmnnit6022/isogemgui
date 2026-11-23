@@ -9,13 +9,11 @@ from __future__ import annotations
 
 import json
 import time
-from pathlib import Path
 
 import numpy as np
 import pytest
 from PyQt5.QtWidgets import QTableWidgetItem
 
-from core import io_json
 from core.bspline import _basis_scalar, basis_functions, bspline_curve, valid_domain
 from core.knots import open_uniform, uniform
 from core.nurbs import nurbs_curve, nurbs_surface, rational_basis_matrix, sample_parameters
