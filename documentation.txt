@@ -53,7 +53,7 @@ What was created:
   * examples/nurbscurve2.json, nurbscurve3.json, airfoil_nurbs_curve.json, nurbs_saddle_surface.json
     (extra samples, moved here from the project root)
 - requirements.txt: Python package dependencies.
-- README.md: Project guide and instructions.
+- README.txt: Project guide and instructions (plain text).
 
 What moved:
 - All previous scattered scripts from "B-Spline Curve/", "Bezier Curve/", and "Bezier Surface/", as well as the old launcher, were first moved into "oldcode/archive/". Once all of their functionality lived in core/ and ui/, that folder was deleted in the code clean-up (it remains in the git history).
@@ -524,7 +524,7 @@ FILES YOU MUST NOT DELETE:
 - examples/ (sample JSON files)
 - Matlab/ (your original validation scripts)
 - requirements.txt (dependencies)
-- README.md (project instructions)
+- README.txt (project instructions)
 - documentation.txt (technical documentation)
 - pytest.ini (test configuration)
 
@@ -571,11 +571,15 @@ FILES YOU MUST NOT DELETE:
 
 2. verify_project.py Audit:
    - Command: python verify_project.py
-   - Summary: 70 passed, 1 failed, 0 warnings, 0 skipped.
+   - Summary: 69 passed, 2 failed, 0 warnings, 0 skipped.
    - What Could Not Be Verified by verify_project.py:
      * Check: "archive/ keeps old scripts"
      * Result: FAIL (archive/ has 0 .py files, old scripts should be kept (>= 10))
-     * Explanation: verify_project.py expects a root "archive/" folder of legacy scripts. The legacy scripts were first kept in "oldcode/archive/" and have since been deleted in the code clean-up (they remain in the git history), so this one check is expected to fail. verify_project.py itself is kept unmodified. All other 70 structure, mathematical, validation, JSON, and headless GUI checks pass.
+     * Explanation: verify_project.py expects a root "archive/" folder of legacy scripts. The legacy scripts were first kept in "oldcode/archive/" and have since been deleted in the code clean-up (they remain in the git history), so this check is expected to fail.
+     * Check: "exists: README.md"
+     * Result: FAIL (missing)
+     * Explanation: the project guide is now the plain-text README.txt instead of README.md, so this check is expected to fail.
+     * verify_project.py itself is kept unmodified. All other 69 structure, mathematical, validation, JSON, and headless GUI checks pass.
 
 
 7.2 NUMERICAL PRECISION & EXACT CONIC GEOMETRY
