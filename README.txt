@@ -284,48 +284,7 @@ The GUI tests run headless (tests/conftest.py sets
 QT_QPA_PLATFORM=offscreen), so no window opens.
 
 
-7. CHANGE HISTORY
------------------
 
-NURBS support
-    - core/nurbs.py: rational basis, NURBS curves and surfaces, exact circle
-      and cylinder.
-    - core/validation.py: weight checks (positive, right size).
-    - core/io_json.py: nurbs_curve and nurbs_surface file types.
-    - examples/: circle.json, quarter_circle.json, cylinder.json.
-    - ui/: NURBS Curve and NURBS Surface tabs; app.py menu wiring.
-    - Display options moved from the left panels into the plot toolbars.
-
-NURBS fixes and T-shape
-    - NURBS Curve tab: 3D B-spline overlay, working circle detection,
-      rational basis plot and Excel export.
-    - NURBS Surface tab: File -> New really resets, toolbar toggles and style
-      options, auto-resizing tables, equal axes, nets up to 50x50.
-    - core/nurbs.py: extrude_curve, t_profile, nurbs_t_shape,
-      sample_parameters, fit_circle; faster surface evaluation.
-    - core/io_json.py: clear error messages, UTF-8; knots no longer rounded
-      to 6 digits in the UI.
-
-Review fixes
-    - Uniform knots: curves and surfaces are evaluated on the valid range
-      [knots[p], knots[-p-1]] (before, they jumped to (0, 0) at both ends).
-    - Speed: the basis is computed on whole arrays (a degree-10 curve went
-      from about 3 s to a few milliseconds).
-    - Display toggles redraw silently and only when something is plotted.
-    - Clear errors for bad table cells and for files whose degree or net
-      size does not fit the UI.
-
-Knot display, knot insertion and IGA Analysis
-    - Knots checkbox in the B-spline, NURBS Curve and NURBS Surface tabs.
-    - core/refinement.py: insert_knot, refine_uniform, insert_knot_surface,
-      refine_surface_uniform (Boehm's algorithm, weights handled).
-    - IGA Analysis tab (ui/analysis_tab.py, core/analysis.py).
-    - core: basis derivatives, element_boundaries, quarter_annulus,
-      plate_with_hole.
-    - Left panels scroll instead of squashing their tables.
-
-Code clean-up
-    - Deleted the oldcode/ folder (still in the git history).
     - Moved loose sample JSON files into examples/.
     - Removed unused imports and duplicated start-up code (main.py now calls
       app.main()).
