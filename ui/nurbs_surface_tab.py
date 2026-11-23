@@ -17,7 +17,7 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 from core.knots import open_uniform
 from core.nurbs import nurbs_surface, nurbs_cylinder, nurbs_t_shape, sample_parameters
 from core.validation import validate_bspline_params
-from ui.common import format_knots, format_number, parse_knots_text
+from ui.common import check_spin_value, format_knots, format_number, parse_knots_text
 
 DEFAULT_ROWS = 3
 DEFAULT_COLS = 2
@@ -414,6 +414,8 @@ class NurbsSurfaceTab(QWidget):
         nu, nv = net.shape[0], net.shape[1]
         if nu > MAX_NET_SIZE or nv > MAX_NET_SIZE:
             raise ValueError(f"Control net {nu}x{nv} is larger than the supported {MAX_NET_SIZE}x{MAX_NET_SIZE}.")
+        degree_u = check_spin_value(self._deg_u_spin, degree_u, "Degree U")
+        degree_v = check_spin_value(self._deg_v_spin, degree_v, "Degree V")
 
         for spin, value in ((self._rows_spin, nu), (self._cols_spin, nv),
                             (self._deg_u_spin, int(degree_u)), (self._deg_v_spin, int(degree_v))):
@@ -467,8 +469,8 @@ class NurbsSurfaceTab(QWidget):
     def _draw(self, silent: bool = False):
         try:
             net, w, ku, kv, du, dv = self._read_inputs()
-            u_vals = sample_parameters(ku, 40)
-            v_vals = sample_parameters(kv, 15)
+            u_vals = sample_parameters(ku, 40, du)
+            v_vals = sample_parameters(kv, 15, dv)
             X, Y, Z = nurbs_surface(ku, kv, du, dv, net, w, u_values=u_vals, v_values=v_vals)
         except Exception as e:
             if not silent:

@@ -20,7 +20,7 @@ from core.nurbs import (
 )
 from core.bspline import bspline_curve, basis_matrix
 from core.validation import validate_bspline_params
-from ui.common import format_knots, format_number, parse_knots_text
+from ui.common import check_spin_value, format_knots, format_number, parse_knots_text
 
 
 class NurbsCurveTab(QWidget):
@@ -174,7 +174,8 @@ class NurbsCurveTab(QWidget):
         cp = np.atleast_2d(np.asarray(cp, dtype=float))
         weights = list(weights)
         is_3d = cp.shape[1] == 3
-        self._deg_spin.setValue(int(degree))
+        degree = check_spin_value(self._deg_spin, degree, "Degree")
+        self._deg_spin.setValue(degree)
         self._knots_edit.setText(format_knots(knots))
         self._table.setRowCount(0)
         for i in range(cp.shape[0]):
@@ -333,7 +334,7 @@ class NurbsCurveTab(QWidget):
     def _draw(self):
         try:
             knots, degree, cp, w = self._read_inputs()
-            u_vals = sample_parameters(knots, 400)
+            u_vals = sample_parameters(knots, 400, degree)
             curve = nurbs_curve(knots, degree, cp, w, u_values=u_vals)
         except Exception as e:
             QMessageBox.warning(self, "Error", str(e))

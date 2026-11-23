@@ -22,7 +22,7 @@ What was created:
   * ui/__init__.py
 - app.py: The main unified desktop application with tabs, menus, and status bar.
 - main.py: Clean application launcher that starts app.py.
-- tests/: Full pytest test suite with 92 passing tests (math, JSON and headless GUI).
+- tests/: Full pytest test suite with 115 passing tests (math, JSON and headless GUI).
   * tests/test_bezier.py
   * tests/test_bspline.py
   * tests/test_knots.py
@@ -70,8 +70,12 @@ Functions:
   Recursively calculates the value of the i-th B-spline basis function of degree p at a single parameter value u. Handles zero division and includes the right endpoint u == knots[-1].
 - basis_matrix(knots, degree, n_eval=200):
   Generates a matrix of all basis functions evaluated over an evenly spaced parameter array from the first knot to the last knot.
-- bspline_curve(knots, degree, control_points, n_eval=200):
-  Multiplies the evaluated basis functions with the control points to return the coordinates of points along the B-spline curve.
+- basis_functions(knots, degree, u):
+  Vectorised Cox-de Boor: every N_{i,p} at an array of parameters at once (same rules as _basis_scalar).
+- valid_domain(knots, degree):
+  Returns (knots[p], knots[-p-1]), the range where the basis sums to 1 and the curve is defined.
+- bspline_curve(knots, degree, control_points, n_eval=200, u_values=None):
+  Multiplies the evaluated basis functions with the control points to return the coordinates of points along the B-spline curve, sampled on its valid range.
 
 File: core/nurbs.py
 Description:

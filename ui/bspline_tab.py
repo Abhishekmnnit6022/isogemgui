@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import List, Optional
 import numpy as np
-import pandas as pd
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QLineEdit,
     QSpinBox, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
@@ -15,10 +14,10 @@ from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
 
-from core.bspline import basis_matrix, bspline_curve
+from core.bspline import basis_matrix, bspline_curve, valid_domain
 from core.knots import open_uniform, uniform
-from core.validation import validate_bspline_params, validate_knots
-from ui.common import format_knots
+from core.validation import validate_bspline_params
+from ui.common import check_spin_value, format_knots, parse_knots_text, read_cell_float
 
 
 class BsplineTab(QWidget):
@@ -27,9 +26,7 @@ class BsplineTab(QWidget):
     def __init__(self, status_callback=None):
         super().__init__()
         self._status = status_callback or (lambda msg: None)
-        self._last_basis: Optional[np.ndarray] = None
-        self._last_t: Optional[np.ndarray] = None
-        self._last_degree: int = 2
+        self._last_plot: Optional[str] = None  # "basis" or "curve", whatever is shown now
         self._init_ui()
         self._load_matlab_preset()
 
@@ -238,24 +235,14 @@ class BsplineTab(QWidget):
         self._style_dialog.exec_()
         self._on_display_option_changed()
 
-    def _on_display_option_changed(self):
-        if self._table.rowCount() >= 2:
-            try:
-                self._draw_curve()
-            except Exception:
-                pass
+    # Curve display options only matter while the curve is shown; never replace a basis plot
+    def _on_display_option_changed(self, *_):
+        if self._last_plot == "curve":
+            self._draw_curve(silent=True)
 
     # Parse and validate the knot values entered in the text box
     def parse_knots(self) -> List[float]:
-        text = self._knots_edit.text().strip().replace(",", " ")
-        if not text:
-            raise ValueError("Knot vector is empty. Please enter knots or generate them.")
-        tokens = text.split()
-        try:
-            raw_knots = [float(t) for t in tokens]
-        except ValueError:
-            raise ValueError("All knot values must be numbers.")
-        return validate_knots(raw_knots)
+        return parse_knots_text(self._knots_edit.text())
 
     # Automatically generate clamped open knot vector matching degree and points
     def _generate_open_knots(self):
@@ -326,13 +313,12 @@ class BsplineTab(QWidget):
         pts = []
         has_z = False
         for r in range(rows):
-            x = float(self._table.item(r, 0).text())
-            y = float(self._table.item(r, 1).text())
-            z_item = self._table.item(r, 2)
-            z_text = z_item.text().strip() if z_item else ""
-            if z_text:
+            x = read_cell_float(self._table, r, 0, "X")
+            y = read_cell_float(self._table, r, 1, "Y")
+            z = read_cell_float(self._table, r, 2, "Z", optional=True)
+            if z is not None:
                 has_z = True
-                pts.append([x, y, float(z_text)])
+                pts.append([x, y, z])
             else:
                 pts.append([x, y, 0.0])
         arr = np.array(pts)
@@ -387,7 +373,8 @@ class BsplineTab(QWidget):
     # Populate tab fields from loaded JSON data
     def set_data(self, data: dict):
         if "degree" in data:
-            self._deg_spin.setValue(int(data["degree"]))
+            degree = check_spin_value(self._deg_spin, data["degree"], "Degree")
+            self._deg_spin.setValue(degree)
         if "knots" in data:
             self._knots_edit.setText(format_knots(data["knots"]))
         if "control_points" in data:
@@ -403,15 +390,21 @@ class BsplineTab(QWidget):
             QMessageBox.warning(self, "Validation Error", str(e))
             return
 
-        self._last_basis = basis
-        self._last_t = t
-        self._last_degree = deg
+        self._last_plot = "basis"
 
         self._figure.clear()
         ax = self._figure.add_subplot(111)
         n_basis = basis.shape[0]
         for i in range(n_basis):
             ax.plot(t, basis[i], label=f"N_{i},{deg}")
+
+        # For unclamped knots, mark the range where the basis sums to 1 (where the curve lives)
+        try:
+            start, end = valid_domain(knots, deg)
+            if (start, end) != (knots[0], knots[-1]):
+                ax.axvspan(start, end, color="gray", alpha=0.12, label="Valid curve range")
+        except ValueError:
+            pass
 
         ax.set_xlabel("Parameter u")
         ax.set_ylabel("Basis Value")
@@ -422,7 +415,8 @@ class BsplineTab(QWidget):
         self._status(f"Basis functions plotted: {n_basis} basis functions, degree {deg}")
 
     # Calculate and draw the B-spline curve and control polygon
-    def _draw_curve(self):
+    # silent=True skips the error dialog (used for redraws after display-option changes)
+    def _draw_curve(self, silent: bool = False):
         try:
             knots = self.parse_knots()
             deg = self._deg_spin.value()
@@ -430,8 +424,10 @@ class BsplineTab(QWidget):
             validate_bspline_params(knots, deg, cp.shape[0])
             curve = bspline_curve(knots, deg, cp, n_eval=300)
         except Exception as e:
-            QMessageBox.warning(self, "Validation Error", str(e))
+            if not silent:
+                QMessageBox.warning(self, "Validation Error", str(e))
             return
+        self._last_plot = "curve"
 
         poly_color = self._poly_color_combo.currentText()
         point_color = self._point_color_combo.currentText()
@@ -516,6 +512,7 @@ class BsplineTab(QWidget):
             n_basis = basis.shape[0]
             col_names = ["u"] + [f"N_{i}_{deg}" for i in range(n_basis)]
             data_matrix = np.column_stack([t, basis.T])
+            import pandas as pd
             df = pd.DataFrame(data_matrix, columns=col_names)
             df.to_excel(filepath, index=False)
             self._status(f"Basis matrix exported to {filepath}")

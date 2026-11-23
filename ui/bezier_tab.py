@@ -13,6 +13,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationTool
 from matplotlib.figure import Figure
 
 from core.bezier import bezier_curve
+from ui.common import read_cell_float
 
 
 class BezierTab(QWidget):
@@ -22,6 +23,7 @@ class BezierTab(QWidget):
         super().__init__()
         self._status = status_callback or (lambda msg: None)
         self._is_3d = False
+        self._has_plot = False
         self._init_ui()
 
     # Build the user interface with left control panel and right plot view
@@ -188,12 +190,10 @@ class BezierTab(QWidget):
         self._style_dialog.exec_()
         self._on_display_option_changed()
 
-    def _on_display_option_changed(self):
-        if self._table.rowCount() >= 2:
-            try:
-                self._draw()
-            except Exception:
-                pass
+    # Redraw quietly after a display option changes, but only if a curve is already shown
+    def _on_display_option_changed(self, *_):
+        if self._has_plot:
+            self._draw(silent=True)
 
     # Add a new point from the text boxes into the table
     def _add_point(self):
@@ -246,13 +246,12 @@ class BezierTab(QWidget):
         pts = []
         has_z = False
         for r in range(rows):
-            x = float(self._table.item(r, 0).text())
-            y = float(self._table.item(r, 1).text())
-            z_item = self._table.item(r, 2)
-            z_text = z_item.text().strip() if z_item else ""
-            if z_text:
+            x = read_cell_float(self._table, r, 0, "X")
+            y = read_cell_float(self._table, r, 1, "Y")
+            z = read_cell_float(self._table, r, 2, "Z", optional=True)
+            if z is not None:
                 has_z = True
-                pts.append([x, y, float(z_text)])
+                pts.append([x, y, z])
             else:
                 pts.append([x, y, 0.0])
         arr = np.array(pts)
@@ -292,13 +291,16 @@ class BezierTab(QWidget):
             self.set_control_points(np.array(data["control_points"]))
 
     # Calculate and draw the Bezier curve and control polygon
-    def _draw(self):
+    # silent=True skips the error dialog (used for redraws after display-option changes)
+    def _draw(self, silent: bool = False):
         try:
             cp = self.get_control_points()
             curve = bezier_curve(cp, n_eval=500)
         except Exception as e:
-            QMessageBox.warning(self, "Error", str(e))
+            if not silent:
+                QMessageBox.warning(self, "Error", str(e))
             return
+        self._has_plot = True
 
         poly_color = self._poly_color_combo.currentText()
         point_color = self._point_color_combo.currentText()

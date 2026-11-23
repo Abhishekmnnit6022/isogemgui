@@ -15,6 +15,9 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 
 from core.bezier import bezier_surface
 from core.validation import validate_surface_net
+from ui.common import check_spin_value
+
+MAX_NET_SIZE = 50
 
 
 class SurfaceTab(QWidget):
@@ -23,6 +26,7 @@ class SurfaceTab(QWidget):
     def __init__(self, status_callback=None):
         super().__init__()
         self._status = status_callback or (lambda msg: None)
+        self._has_plot = False
         self._init_ui()
         self._load_default_preset()
 
@@ -39,13 +43,13 @@ class SurfaceTab(QWidget):
         size_row = QHBoxLayout()
         size_row.addWidget(QLabel("Rows (U):"))
         self._rows_spin = QSpinBox()
-        self._rows_spin.setRange(2, 20)
+        self._rows_spin.setRange(2, MAX_NET_SIZE)
         self._rows_spin.setValue(3)
         size_row.addWidget(self._rows_spin)
 
         size_row.addWidget(QLabel("Cols (V):"))
         self._cols_spin = QSpinBox()
-        self._cols_spin.setRange(2, 20)
+        self._cols_spin.setRange(2, MAX_NET_SIZE)
         self._cols_spin.setValue(3)
         size_row.addWidget(self._cols_spin)
 
@@ -198,12 +202,10 @@ class SurfaceTab(QWidget):
         self._style_dialog.exec_()
         self._on_display_option_changed()
 
-    def _on_display_option_changed(self):
-        if self._table.rowCount() >= 4:
-            try:
-                self._draw()
-            except Exception:
-                pass
+    # Redraw quietly after a display option changes, but only if a surface is already shown
+    def _on_display_option_changed(self, *_):
+        if self._has_plot:
+            self._draw(silent=True)
 
     # Adjust table rows according to rows and cols spinbox values
     def _resize_table(self):
@@ -286,6 +288,8 @@ class SurfaceTab(QWidget):
     def set_control_net(self, net: np.ndarray):
         net = validate_surface_net(net)
         nu, nv, _ = net.shape
+        check_spin_value(self._rows_spin, nu, "Number of control net rows")
+        check_spin_value(self._cols_spin, nv, "Number of control net columns")
         self._rows_spin.setValue(nu)
         self._cols_spin.setValue(nv)
         self._dim_label.setText(f"Degree: U={nu - 1}, V={nv - 1}")
@@ -321,13 +325,16 @@ class SurfaceTab(QWidget):
             self.set_control_net(np.array(data["control_points"]))
 
     # Evaluate the surface and plot both the 3D surface and control net
-    def _draw(self):
+    # silent=True skips the error dialog (used for redraws after display-option changes)
+    def _draw(self, silent: bool = False):
         try:
             net = self.get_control_net()
             X, Y, Z = bezier_surface(net, u_eval=30, v_eval=30)
         except Exception as e:
-            QMessageBox.warning(self, "Validation Error", str(e))
+            if not silent:
+                QMessageBox.warning(self, "Validation Error", str(e))
             return
+        self._has_plot = True
 
         nu, nv, _ = net.shape
         self._figure.clear()

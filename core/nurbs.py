@@ -1,6 +1,6 @@
 """NURBS (Non-Uniform Rational B-Spline) curve and surface evaluation.
 
-Reuses the Cox-de Boor recursion from core.bspline and adds rational
+Reuses the Cox-de Boor basis from core.bspline and adds rational
 weighting on top.
 """
 
@@ -11,7 +11,7 @@ from typing import List, Sequence, Tuple
 
 import numpy as np
 
-from .bspline import _basis_scalar, basis_matrix
+from .bspline import basis_functions, valid_domain
 from .validation import (
     validate_bspline_params,
     validate_control_points,
@@ -49,17 +49,18 @@ def rational_basis_matrix(
     n_basis = len(knots_list) - degree - 1
     w = validate_weights(weights, n_basis)
 
-    N, u = basis_matrix(knots_list, degree, n_eval)  # (n_basis, n_eval)
+    # Sample the valid range only: outside it the basis does not sum to 1
+    start, end = valid_domain(knots_list, degree)
+    u = np.linspace(start, end, n_eval)
+    return u, _rational(basis_functions(knots_list, degree, u), w)
 
-    # Weighted basis: W_i = N_i * w_i
+
+# R = N * w / sum(N * w), column by column; columns with zero denominator stay zero
+def _rational(N: np.ndarray, w: np.ndarray) -> np.ndarray:
     W = N * w[:, np.newaxis]
-    denom = W.sum(axis=0)  # (n_eval,)
-
-    # Avoid division by zero at degenerate points
+    denom = W.sum(axis=0)
     denom[denom == 0.0] = 1.0
-
-    R = W / denom[np.newaxis, :]
-    return u, R
+    return W / denom[np.newaxis, :]
 
 
 # NURBS curve
@@ -95,25 +96,13 @@ def nurbs_curve(
     w = validate_weights(weights, n_cp)
     validate_bspline_params(knots_list, degree, n_cp)
 
-    dim = cp.shape[1]
     if u_values is None:
-        u = np.linspace(knots_list[0], knots_list[-1], n_eval)
+        start, end = valid_domain(knots_list, degree)
+        u = np.linspace(start, end, n_eval)
     else:
         u = np.asarray(u_values, dtype=float)
-    curve = np.zeros((u.shape[0], dim))
-
-    for j, u_val in enumerate(u):
-        numer = np.zeros(dim)
-        denom = 0.0
-        for i in range(n_cp):
-            Ni = _basis_scalar(i, degree, u_val, knots_list)
-            nw = Ni * w[i]
-            numer += nw * cp[i]
-            denom += nw
-        if denom != 0.0:
-            curve[j] = numer / denom
-
-    return curve
+    R = _rational(basis_functions(knots_list, degree, u), w)  # (n_cp, len(u))
+    return R.T @ cp
 
 
 # NURBS surface
@@ -159,14 +148,14 @@ def nurbs_surface(
     validate_bspline_params(ku, du, rows)
     validate_bspline_params(kv, dv, cols)
 
-    u_arr = (np.linspace(ku[0], ku[-1], n_eval_u) if u_values is None
+    u_arr = (np.linspace(*valid_domain(ku, du), n_eval_u) if u_values is None
              else np.asarray(u_values, dtype=float))
-    v_arr = (np.linspace(kv[0], kv[-1], n_eval_v) if v_values is None
+    v_arr = (np.linspace(*valid_domain(kv, dv), n_eval_v) if v_values is None
              else np.asarray(v_values, dtype=float))
 
     # Basis values are computed once per direction: Nu (len(u), rows), Nv (len(v), cols)
-    Nu = np.array([[_basis_scalar(i, du, u_val, ku) for i in range(rows)] for u_val in u_arr])
-    Nv = np.array([[_basis_scalar(j, dv, v_val, kv) for j in range(cols)] for v_val in v_arr])
+    Nu = basis_functions(ku, du, u_arr).T
+    Nv = basis_functions(kv, dv, v_arr).T
 
     # Weighted tensor-product sums: denom = sum_ij Nu_i Nv_j w_ij, numer = same times P_ij
     denom = np.einsum("ai,bj,ij->ab", Nu, Nv, w)
@@ -395,15 +384,21 @@ def nurbs_t_shape(
 
 # Parameter sampling that always includes the knots
 
-def sample_parameters(knots: Sequence[float], n_eval: int = 200) -> np.ndarray:
-    """Evenly spaced parameters over the knot range, merged with every distinct knot.
+def sample_parameters(knots: Sequence[float], n_eval: int = 200,
+                      degree: int | None = None) -> np.ndarray:
+    """Evenly spaced parameters merged with every distinct knot inside the range.
 
     Sharp corners of a curve (repeated knots) sit exactly at knot values, so
     including the knots makes plots show corners exactly instead of cutting them.
+    With a degree, only the valid range [knots[p], knots[-p-1]] is sampled
+    (needed for unclamped knots); without one, the whole knot range is used.
     """
     k = validate_knots(knots)
-    base = np.linspace(k[0], k[-1], max(int(n_eval), 2))
-    return np.unique(np.concatenate([base, np.asarray(k, dtype=float)]))
+    start, end = (k[0], k[-1]) if degree is None else valid_domain(k, degree)
+    base = np.linspace(start, end, max(int(n_eval), 2))
+    kk = np.asarray(k, dtype=float)
+    inside = kk[(kk >= start) & (kk <= end)]
+    return np.unique(np.concatenate([base, inside]))
 
 
 # Exact circle check for evaluated 2D points

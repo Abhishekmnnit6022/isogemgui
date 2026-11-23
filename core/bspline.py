@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Tuple
 import numpy as np
 
 from .validation import (
@@ -13,7 +13,7 @@ from .validation import (
 )
 
 
-# Recursive Cox-de Boor function for a single parameter value u
+# Recursive Cox-de Boor function for a single parameter value u (kept as the reference)
 def _basis_scalar(i: int, p: int, u: float, knots: List[float]) -> float:
     """Computes the basis function N_{i,p}(u) at a single number u.
     Zero division is treated as zero.
@@ -38,13 +38,83 @@ def _basis_scalar(i: int, p: int, u: float, knots: List[float]) -> float:
     return c1 * _basis_scalar(i, p - 1, u, knots) + c2 * _basis_scalar(i + 1, p - 1, u, knots)
 
 
+# All basis functions N_{i,p} at many parameter values at once (same recurrence, vectorised)
+def basis_functions(knots: Sequence[float], degree: int, u: Sequence[float]) -> np.ndarray:
+    """Evaluates every B-spline basis function N_{i,p}(u) for an array of parameters.
+
+    Uses the Cox-de Boor recurrence bottom-up (degree 0, 1, ..., p) on whole arrays,
+    with exactly the same rules as _basis_scalar (0/0 = 0, right end point included).
+
+    Returns:
+        Array of shape (len(knots) - degree - 1, len(u)).
+    """
+    k = np.asarray(validate_knots(knots), dtype=float)
+    p = validate_degree(degree)
+    u = np.atleast_1d(np.asarray(u, dtype=float))
+    n_spans = len(k) - 1
+    if n_spans - p < 1:
+        raise ValueError(
+            f"len(knots) - degree - 1 must be >= 1 (got {n_spans - p}). "
+            f"Add more knots or reduce the degree."
+        )
+
+    # Degree 0: indicator of each half-open span [k_i, k_{i+1})
+    N = np.zeros((n_spans, u.size))
+    for i in range(n_spans):
+        if k[i] < k[i + 1]:
+            N[i] = (k[i] <= u) & (u < k[i + 1])
+    # The last non-empty span also contains the final knot value
+    nonempty = [i for i in range(n_spans) if k[i] < k[i + 1]]
+    if nonempty:
+        last = nonempty[-1]
+        if k[last + 1] == k[-1]:
+            N[last, u == k[-1]] = 1.0
+
+    # Raise the degree one step at a time
+    for q in range(1, p + 1):
+        nxt = np.zeros((n_spans - q, u.size))
+        for i in range(n_spans - q):
+            d1 = k[i + q] - k[i]
+            d2 = k[i + q + 1] - k[i + 1]
+            if d1 != 0.0:
+                nxt[i] += (u - k[i]) / d1 * N[i]
+            if d2 != 0.0:
+                nxt[i] += (k[i + q + 1] - u) / d2 * N[i + 1]
+        N = nxt
+    return N
+
+
+# Parameter range on which the basis functions add up to 1
+def valid_domain(knots: Sequence[float], degree: int) -> Tuple[float, float]:
+    """Returns (u_start, u_end) = (knots[p], knots[-p-1]), where the curve is defined.
+
+    For clamped (open) knot vectors this is the whole knot range. For unclamped
+    knots (for example uniform 0, 1, 2, ...) the first and last p spans are not
+    covered by a full set of basis functions, so a curve must not be drawn there.
+    """
+    k = validate_knots(knots)
+    p = validate_degree(degree)
+    if len(k) < 2 * p + 2:
+        raise ValueError(
+            f"Knot vector is too short for degree {p}: need at least {2 * p + 2} knots, got {len(k)}."
+        )
+    start, end = k[p], k[-p - 1]
+    if not start < end:
+        raise ValueError(
+            f"Knot vector has an empty valid range: knots[{p}] = {start} must be "
+            f"smaller than knots[{len(k) - p - 1}] = {end}."
+        )
+    return start, end
+
+
 # Generate the full basis function matrix across parameter array t
 def basis_matrix(
     knots: Sequence[float],
     degree: int,
     n_eval: int = 200,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Calculates all B-spline basis functions over an evenly spaced range of u values.
+    """Calculates all B-spline basis functions over an evenly spaced range of u values
+    covering the whole knot vector (so the plot shows every function completely).
     Returns (basis_matrix, parameter_array).
     """
     knots_list = validate_knots(knots)
@@ -57,11 +127,7 @@ def basis_matrix(
         )
 
     t = np.linspace(knots_list[0], knots_list[-1], n_eval)
-    basis = np.zeros((n_basis, n_eval))
-    for i in range(n_basis):
-        for j, u_val in enumerate(t):
-            basis[i, j] = _basis_scalar(i, degree, u_val, knots_list)
-    return basis, t
+    return basis_functions(knots_list, degree, t), t
 
 
 # Calculate 2D or 3D B-spline curve points from knots and control points
@@ -70,19 +136,22 @@ def bspline_curve(
     degree: int,
     control_points: np.ndarray,
     n_eval: int = 200,
+    u_values: Optional[Sequence[float]] = None,
 ) -> np.ndarray:
-    """Calculates points along the B-spline curve by multiplying basis functions with control points."""
+    """Calculates points along the B-spline curve by multiplying basis functions with control points.
+
+    The curve is sampled on its valid range [knots[p], knots[-p-1]] (the whole range for
+    clamped knots). Pass u_values to evaluate at chosen parameters instead.
+    """
     knots_list = validate_knots(knots)
     degree = validate_degree(degree)
     cp = validate_control_points(control_points)
     validate_bspline_params(knots_list, degree, cp.shape[0])
 
-    n_basis = cp.shape[0]
-    dim = cp.shape[1]
-
-    t = np.linspace(knots_list[0], knots_list[-1], n_eval)
-    curve = np.zeros((n_eval, dim))
-    for j, u_val in enumerate(t):
-        for i in range(n_basis):
-            curve[j] += _basis_scalar(i, degree, u_val, knots_list) * cp[i]
-    return curve
+    if u_values is None:
+        start, end = valid_domain(knots_list, degree)
+        u = np.linspace(start, end, n_eval)
+    else:
+        u = np.asarray(u_values, dtype=float)
+    N = basis_functions(knots_list, degree, u)  # (n_cp, len(u))
+    return N.T @ cp

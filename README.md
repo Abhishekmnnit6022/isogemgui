@@ -29,7 +29,7 @@ gui2/
 │   ├── nurbs_curve_tab.py   # NURBS curve tab: weights, B-spline overlay, rational basis, circle & T-profile demos
 │   ├── nurbs_surface_tab.py # NURBS surface tab: weight grid, cylinder & 3D T-shape demos, rotatable 3D
 │   └── common.py            # Shared knot text formatting/parsing (lossless)
-├── tests/                   # Pytest test suite (92 tests: math, JSON and headless GUI)
+├── tests/                   # Pytest test suite (115 tests: math, JSON and headless GUI)
 │   ├── test_bezier.py       # Partition of unity, endpoints, closed-forms, convex hull
 │   ├── test_bspline.py      # B-spline partition of unity, endpoints, Matlab reference
 │   ├── test_knots.py        # Knot generator validation
@@ -37,6 +37,7 @@ gui2/
 │   ├── test_nurbs.py        # Weights equivalence, circle/cylinder accuracy, partition of unity
 │   ├── test_shapes.py       # T-shape/cylinder exactness, extrusion, sampling, circle fitting
 │   ├── test_ui_nurbs.py     # Headless GUI tests for the NURBS tabs and main window
+│   ├── test_regressions.py  # Uniform knots, fast basis, silent toggles, clear load/cell errors
 │   └── conftest.py          # Offscreen Qt application and message-box capture
 ├── examples/                # Sample geometry JSON files
 │   ├── cubic_bezier_2d.json
@@ -104,7 +105,7 @@ python app.py
 
 3. **B-Spline Curves**:
    - Arbitrary polynomial degree and knot vector configuration.
-   - Automatic generation of open clamped and uniform knot vectors.
+   - Automatic generation of open clamped and uniform knot vectors. Curves are drawn on their valid range [u_p, u_(m-p)], so uniform (unclamped) knots give correct curves; the basis plot shades that range.
    - Plot basis functions independently or draw curves.
    - Export calculated basis matrices directly to Microsoft Excel (`.xlsx`).
 
@@ -173,6 +174,13 @@ python app.py
 * **Core (`core/nurbs.py`)**: `extrude_curve`, `t_profile`, `nurbs_t_shape`, `sample_parameters` (sampling that always includes the knots so sharp corners are drawn exactly) and `fit_circle`. `nurbs_curve`/`nurbs_surface` accept explicit parameter values; `nurbs_surface` computes each basis once and sums with NumPy (much faster); `nurbs_cylinder` is now built with `extrude_curve`.
 * **JSON (`core/io_json.py`)**: clear errors for missing fields, invalid JSON and bad values; UTF-8 file encoding. The UI no longer rounds knots to 6 digits (`ui/common.py`).
 * **Tests**: 53 new tests (92 total), including headless GUI tests that drive the NURBS tabs and main window.
+
+### Review fixes
+* **Uniform knots**: B-spline/NURBS curves, surfaces and the rational basis are evaluated on the valid range `[knots[p], knots[-p-1]]` (`core.bspline.valid_domain`); before, uniform knots made curves jump to (0, 0) at both ends.
+* **Speed**: `core.bspline.basis_functions` evaluates the Cox-de Boor recurrence on whole arrays (a degree-10 curve went from about 3 s to a few milliseconds); the recursive `_basis_scalar` stays as the test reference.
+* **Display toggles** in the Bezier curve, Bezier surface and B-spline tabs redraw silently and only when something is plotted; on the B-spline tab they no longer replace the basis plot.
+* **Clear errors** for bad table cells (e.g. `Row 2: X value 'abc' is not a number.`) and for files whose degree or net size does not fit the UI (e.g. `Degree 16 is outside the supported range 1 to 15.`) instead of silently changing the loaded values. The Bezier surface tab now accepts nets up to 50x50.
+* **Tests**: 23 new regression tests (115 total).
 
 ---
 
