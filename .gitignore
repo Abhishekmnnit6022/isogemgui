@@ -11,3 +11,6 @@ verify_report.txt
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Documentation
+documentation.txt
