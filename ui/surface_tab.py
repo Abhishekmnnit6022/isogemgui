@@ -202,7 +202,7 @@ class SurfaceTab(QWidget):
         self._style_dialog.exec_()
         self._on_display_option_changed()
 
-    # Redraw quietly after a display option changes, but only if a surface is already shown
+    # Quiet redraw after a display option changes (only if something is drawn)
     def _on_display_option_changed(self, *_):
         if self._has_plot:
             self._draw(silent=True)
@@ -344,7 +344,7 @@ class SurfaceTab(QWidget):
         if self._show_surface_chk.isChecked():
             ax.plot_surface(X, Y, Z, color="cyan", alpha=0.7, edgecolor="gray", linewidth=0.5)
 
-        # Plot control net vertices as a Line3D artist so it appears in Figure Options -> Curves
+        # Control points as one Line3D so Figure Options can edit them
         # and responds directly to Point Color and Marker selection
         if self._show_points_chk.isChecked():
             p_color = self._point_color_combo.currentText()
@@ -361,9 +361,7 @@ class SurfaceTab(QWidget):
                 label="Control points",
             )
 
-        # Plot all control net lines in a single call using NaN separators
-        # This groups all grid lines under a single "Control net lines" label
-        # so Figure Options edits all lines together instead of multiple _child entries.
+        # All net lines in one plot call (NaN breaks the lines), so they share one legend entry.
         if self._show_lines_chk.isChecked():
             lines_x: list[float] = []
             lines_y: list[float] = []

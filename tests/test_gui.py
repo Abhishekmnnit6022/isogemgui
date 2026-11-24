@@ -1,20 +1,87 @@
-"""Headless GUI tests for the NURBS Curve and NURBS Surface tabs and the main window."""
+"""GUI tests: the curve and surface tabs, display options and project rules."""
 
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
-from PyQt5.QtWidgets import QTableWidgetItem
+from PyQt5.QtWidgets import QFileDialog, QTableWidgetItem
 
 from core import io_json
-from core.nurbs import nurbs_cylinder, nurbs_t_shape
+from core.nurbs import nurbs_cylinder, nurbs_surface, nurbs_t_shape, sample_parameters
 from ui.common import format_knots, format_number, parse_knots_text
 
 
-# ---------------------------------------------------------------- helpers
+# ---------------- Fixed bugs: display toggles and table errors
+
+def _title(tab):
+    return tab._figure.axes[0].get_title() if tab._figure.axes else ""
+
+
+def test_bezier_toggles_are_silent_and_need_a_plot(window, dialogs):
+    tab = window._bezier_tab
+    tab.set_control_points(np.array([[0, 0], [1, 2], [2, 0]]))
+    tab._show_poly_chk.setChecked(False)            # nothing drawn yet -> no redraw
+    assert tab._figure.axes == []
+    tab._draw()
+    tab._table.setItem(1, 0, QTableWidgetItem("abc"))
+    tab._show_points_chk.setChecked(False)          # bad input -> keep old plot, no pop-up
+    assert dialogs == []
+    tab._draw()                                     # explicit Draw still reports it
+    assert dialogs[-1][2] == "Row 2: X value 'abc' is not a number."
+
+
+def test_bspline_toggles_keep_basis_plot(window, dialogs):
+    tab = window._bspline_tab
+    tab._plot_basis()
+    tab._show_poly_chk.setChecked(False)
+    tab._curve_color_combo.setCurrentIndex(2)
+    assert _title(tab).startswith("B-Spline Basis Functions")
+    tab._draw_curve()
+    tab._show_points_chk.setChecked(False)
+    labels = [l.get_label() for l in tab._figure.axes[0].get_lines()]
+    assert "Control points" not in labels and "B-spline curve" in labels
+    tab._knots_edit.setText("0 0 1")
+    tab._show_points_chk.setChecked(True)
+    assert dialogs == []
+
+
+def test_bspline_cell_errors_are_clear(window, dialogs):
+    tab = window._bspline_tab
+    tab._table.setItem(2, 1, QTableWidgetItem(""))
+    tab._draw_curve()
+    assert dialogs[-1][2] == "Row 3: Y is empty."
+    tab._load_matlab_preset()
+    tab._table.setItem(0, 2, QTableWidgetItem("z?"))
+    tab._draw_curve()
+    assert dialogs[-1][2] == "Row 1: Z value 'z?' is not a number."
+
+
+def test_bspline_uniform_knots_in_gui(window, dialogs):
+    tab = window._bspline_tab
+    tab._generate_uniform_knots()
+    tab._draw_curve()
+    assert dialogs == []
+    curve = [l for l in tab._figure.axes[0].get_lines() if l.get_label() == "B-spline curve"][0]
+    xy = np.column_stack(curve.get_data())
+    assert np.min(np.linalg.norm(xy, axis=1)) > 1.0  # Matlab preset points are far from (0, 0)
+    tab._plot_basis()
+    assert any(p.get_label() == "Valid curve range" for p in tab._figure.axes[0].patches)
+
+
+def test_bezier_surface_toggles_are_silent(window, dialogs):
+    tab = window._surface_tab
+    tab._draw()
+    tab._table.setItem(0, 2, QTableWidgetItem("x"))
+    tab._show_points_chk.setChecked(False)
+    tab._show_lines_chk.setChecked(False)
+    assert dialogs == []
+
+
+# ---------------- NURBS curve and surface tabs
 
 class StatusLog:
     """Collects status-bar messages sent by a tab."""
@@ -53,8 +120,6 @@ def surface_tab(qapp):
     return tab
 
 
-# ---------------------------------------------------------------- knot text helpers
-
 def test_format_knots_is_lossless():
     knots = sorted([0, 0, 1 / 3, 0.1, 2 / 7, 1e-17, 12345.678901234567, 1])
     assert parse_knots_text(format_knots(knots)) == [float(k) for k in knots]
@@ -70,8 +135,6 @@ def test_parse_knots_text_errors():
     with pytest.raises(ValueError, match="non-decreasing"):
         parse_knots_text("0 1 0.5")
 
-
-# ---------------------------------------------------------------- NURBS curve tab
 
 def test_circle_draw_reports_radius_error(curve_tab, dialogs):
     curve_tab._load_circle()
@@ -171,8 +234,6 @@ def test_curve_reset(curve_tab):
     assert curve_tab._knots_edit.text() == ""
     assert curve_tab._figure.axes == []
 
-
-# ---------------------------------------------------------------- NURBS surface tab
 
 def test_surface_reset_gives_drawable_default(surface_tab, dialogs):
     surface_tab._load_t_shape()
@@ -292,14 +353,6 @@ def test_surface_invalid_weight_and_direction_messages(surface_tab, dialogs):
     assert dialogs[-1][2].startswith("V direction (cols)")
 
 
-# ---------------------------------------------------------------- main window
-
-@pytest.fixture
-def window(qapp):
-    from app import MainWindow
-    return MainWindow()
-
-
 def test_file_new_resets_nurbs_tabs(window):
     window._tabs.setCurrentWidget(window._nurbs_surface_tab)
     window._nurbs_surface_tab._load_t_shape()
@@ -343,3 +396,59 @@ def test_every_example_opens_in_its_tab(window, dialogs, monkeypatch):
         draw = getattr(window._tabs.currentWidget(), "_draw", None) or window._bspline_tab._draw_curve
         draw()
     assert [d for d in dialogs if d[0] != "information"] == []
+
+
+# ---------------- Project rules and empty-input smoke test
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def _grep(folder_files, pattern):
+    """Lines matching a regex in the given Python files, as 'file:line: text'."""
+    hits = []
+    for f in folder_files:
+        for n, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            if re.search(pattern, line):
+                hits.append(f"{f.relative_to(ROOT)}:{n}: {line.strip()}")
+    return hits
+
+
+CORE = sorted((ROOT / "core").glob("*.py"))
+
+
+UI = sorted((ROOT / "ui").glob("*.py")) + [ROOT / "app.py", ROOT / "main.py"]
+
+
+def test_core_is_pure_maths():
+    """core/ must not use GUI or plotting libraries, print() or input() (keeps it testable)."""
+    hits = _grep(CORE, r"^\s*(import|from)\s+(matplotlib|PyQt5|tkinter)|\bprint\(|\binput\(")
+    assert not hits, "\n".join(hits)
+
+
+def test_ui_keeps_plain_classic_style():
+    """No stylesheets, custom palettes or Fusion style: the window keeps the classic look."""
+    hits = _grep(UI, r"setStyleSheet|setPalette|QPalette\(|Fusion")
+    assert not hits, "\n".join(hits)
+
+
+def test_draw_buttons_survive_empty_input(qapp, dialogs, monkeypatch):
+    """Clicking every Draw/Plot button on a fresh window must show a message, never crash."""
+    from PyQt5.QtWidgets import QPushButton
+    from app import MainWindow
+
+    errors = []
+    monkeypatch.setattr(sys, "excepthook", lambda *exc: errors.append(exc[1]))
+    win = MainWindow()
+    for tab in (win._bezier_tab, win._surface_tab, win._bspline_tab, win._nurbs_curve_tab):
+        tab._clear_points() if hasattr(tab, "_clear_points") else tab._clear_coords()
+    clicked = []
+    for i in range(win._tabs.count()):
+        win._tabs.setCurrentIndex(i)
+        for button in win._tabs.widget(i).findChildren(QPushButton):
+            if re.search(r"draw|plot", button.text(), re.I) and button.isEnabled():
+                button.click()
+                qapp.processEvents()
+                clicked.append(button.text())
+    assert clicked, "no Draw/Plot buttons found"
+    assert not errors, f"uncaught exceptions: {errors}"
+    win.close()

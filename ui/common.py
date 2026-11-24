@@ -8,11 +8,7 @@ from core.validation import validate_knots
 
 
 def format_number(value: float) -> str:
-    """Shortest text that converts back to exactly the same float.
-
-    Uses repr() so no precision is lost (1/3 -> '0.3333333333333333'),
-    and drops a trailing '.0' so whole numbers stay short ('2' not '2.0').
-    """
+    """Shortest text that gives back exactly the same float ('2' not '2.0')."""
     text = repr(float(value))
     if text.endswith(".0"):
         text = text[:-2]
@@ -28,11 +24,7 @@ def format_knots(knots: Iterable[float]) -> str:
 
 def read_cell_float(table, row: int, col: int, name: str,
                     optional: bool = False) -> Optional[float]:
-    """Read a number from a QTableWidget cell with a message that names the row and column.
-
-    Returns None for an empty cell when optional=True; otherwise an empty or
-    non-numeric cell raises ValueError such as "Row 3: X value 'abc' is not a number."
-    """
+    """Number from a table cell, or a clear error naming the row. Empty -> None if optional."""
     item = table.item(row, col)
     text = item.text().strip() if item is not None else ""
     if not text:
@@ -46,11 +38,7 @@ def read_cell_float(table, row: int, col: int, name: str,
 
 
 def check_spin_value(spin, value, label: str) -> int:
-    """Make sure a loaded integer fits a QSpinBox before setting it.
-
-    QSpinBox.setValue() silently clamps out-of-range values, which would change
-    loaded geometry (e.g. degree 16 becoming 15). This raises a clear ValueError instead.
-    """
+    """Error if a loaded value is outside the spin box range (instead of clipping it)."""
     try:
         as_int = int(value)
     except (TypeError, ValueError):

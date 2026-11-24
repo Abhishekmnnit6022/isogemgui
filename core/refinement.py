@@ -1,12 +1,4 @@
-"""Knot insertion (h-refinement) for B-spline / NURBS curves and NURBS surfaces.
-
-Inserting a knot adds one control point but leaves the curve or surface exactly
-the same shape. Repeating this splits elements, which is how an isogeometric
-analysis mesh is refined without touching the geometry.
-
-NURBS are handled in homogeneous coordinates (w*x, w*y, w*z, w), so the same
-algorithm (Boehm's knot insertion) works for rational and non-rational geometry.
-"""
+"""Knot insertion for curves and surfaces. Adds control points, shape stays the same."""
 
 from __future__ import annotations
 
@@ -100,20 +92,9 @@ def insert_knot(
     times: int = 1,
     weights: Optional[Sequence[float]] = None,
 ) -> Tuple[List[float], np.ndarray, Optional[np.ndarray]]:
-    """Insert the knot value u (times times) into a B-spline or NURBS curve.
+    """Insert knot u (times times) into a B-spline or NURBS curve.
 
-    The curve keeps exactly the same shape; it gains `times` control points.
-
-    Args:
-        knots, degree, control_points: the curve (2D or 3D points).
-        u: knot value, strictly inside the valid parameter range.
-        times: how many copies of u to add (total multiplicity may not exceed degree).
-        weights: NURBS weights, or None for a plain B-spline.
-
-    Returns:
-        (new_knots, new_control_points, new_weights) - new_weights is None when
-        weights was None.
-    """
+    Returns (knots, control_points, weights); weights is None for a B-spline."""
     k = validate_knots(knots)
     p = validate_degree(degree)
     cp = validate_control_points(control_points)
@@ -154,13 +135,7 @@ def insert_knot_surface(
     value: float,
     times: int = 1,
 ) -> Tuple[List[float], List[float], np.ndarray, np.ndarray]:
-    """Insert a knot into a NURBS surface in the u or v direction (shape unchanged).
-
-    Inserting in u adds one row of control points, in v one column.
-
-    Returns:
-        (knots_u, knots_v, net, weights)
-    """
+    """Insert a knot in u (adds a row) or v (adds a column) of a NURBS surface."""
     ku, kv = validate_knots(knots_u), validate_knots(knots_v)
     du, dv = validate_degree(degree_u), validate_degree(degree_v)
     net = validate_surface_net(net)

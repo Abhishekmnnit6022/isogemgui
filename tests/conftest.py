@@ -19,10 +19,7 @@ def qapp():
 
 @pytest.fixture
 def dialogs(monkeypatch):
-    """Replace QMessageBox pop-ups with a recorder so tests never block.
-
-    Returns a list of (kind, title, text) tuples, one per message box shown.
-    """
+    """Record message boxes instead of showing them. Returns a list of (kind, title, text)."""
     from PyQt5.QtWidgets import QMessageBox
     shown = []
 
@@ -35,3 +32,10 @@ def dialogs(monkeypatch):
     for kind in ("warning", "information", "critical", "question", "about"):
         monkeypatch.setattr(QMessageBox, kind, staticmethod(make(kind)))
     return shown
+
+
+@pytest.fixture
+def window(qapp):
+    """A fresh main window (all six tabs)."""
+    from app import MainWindow
+    return MainWindow()

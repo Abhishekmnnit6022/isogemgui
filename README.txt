@@ -52,18 +52,12 @@ gui2/
     widgets.py              Refinement box, knot markers, scrollable panels
     common.py               Shared helpers: lossless knot text, cell checks
 
-  tests/                    Pytest suite (169 tests: maths, JSON, headless GUI)
-    test_bezier.py          Partition of unity, end points, convex hull
-    test_bspline.py         B-spline basis, end points, Matlab reference
-    test_knots.py           Knot generators
-    test_io.py              JSON round trips, including NURBS and IGA models
-    test_nurbs.py           Weights, circle/cylinder accuracy
-    test_shapes.py          T-shape/cylinder exactness, extrusion, sampling
-    test_ui_nurbs.py        Headless GUI tests for the NURBS tabs
-    test_regressions.py     Uniform knots, speed, toggles, clear errors
-    test_refinement_analysis.py   Knot insertion, areas, Jacobian, export
-    test_ui_iga.py          GUI workflow: load -> refine -> export -> reopen
-    conftest.py             Offscreen Qt app and message-box capture
+  tests/                    Pytest suite (173 tests: maths, JSON, headless GUI)
+    conftest.py             Shared setup: headless Qt, message-box recorder, main window
+    test_maths.py           66 tests: Bezier, knots, B-spline, NURBS, exact shapes
+    test_files.py           23 tests: JSON save/open, examples, clear file errors
+    test_iga.py             55 tests: knot insertion, analysis model, IGA Analysis tab
+    test_gui.py             29 tests: curve/surface tabs, display options, project rules
 
   examples/                 Sample geometry files (JSON)
     cubic_bezier_2d.json, cubic_bezier_3d.json, bicubic_surface.json
@@ -79,7 +73,8 @@ gui2/
     nurbs_saddle_surface.json
 
   Matlab/                   Validation scripts and reference outputs (untouched)
-  verify_project.py         Independent audit script
+  MATLAB_Verification/      Independent MATLAB check of all IGA results
+                            (start with COMPARISON_SUMMARY.txt)
 
 Where to look first: the maths is in core/ (start with bspline.py and
 nurbs.py). Each tab of the window is one file in ui/. app.py connects the

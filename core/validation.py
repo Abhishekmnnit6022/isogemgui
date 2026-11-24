@@ -1,8 +1,4 @@
-"""Input validation utilities for CAGD geometry data.
-
-Provides clear ValueError messages for malformed inputs so the UI
-can display them in a QMessageBox instead of crashing.
-"""
+"""Input checks that raise ValueError with a clear message."""
 
 from __future__ import annotations
 
@@ -12,13 +8,7 @@ import numpy as np
 
 
 def validate_knots(knots: Sequence[float]) -> List[float]:
-    """Check that *knots* is a non-decreasing sequence with len >= 2.
-
-    Returns a plain Python list of floats.
-
-    Raises:
-        ValueError: on bad input.
-    """
+    """At least 2 knots, never decreasing. Returns a list of floats."""
     knots = [float(k) for k in knots]
     if len(knots) < 2:
         raise ValueError("Knot vector must contain at least 2 values.")
@@ -40,13 +30,7 @@ def validate_degree(degree: int) -> int:
 
 
 def validate_control_points(points: np.ndarray) -> np.ndarray:
-    """Ensure *points* is a 2-D array of shape (n_points, dim).
-
-    Accepts lists-of-lists as well.
-
-    Raises:
-        ValueError: if points are empty, not 2-D, or have inconsistent dims.
-    """
+    """Points as an (n, 2) or (n, 3) array with at least 2 points."""
     pts = np.asarray(points, dtype=float)
     if pts.ndim == 1:
         # Single point -- reshape to (1, dim)
@@ -69,13 +53,7 @@ def validate_control_points(points: np.ndarray) -> np.ndarray:
 def validate_bspline_params(
     knots: Sequence[float], degree: int, n_control_points: int
 ) -> None:
-    """Check the fundamental B-spline relationship m = n + p + 1.
-
-    Where m+1 = len(knots), n+1 = n_control_points, p = degree.
-
-    Raises:
-        ValueError: with a readable message on mismatch.
-    """
+    """Check len(knots) == number of control points + degree + 1."""
     n = n_control_points - 1
     p = degree
     expected_knots = n + p + 1 + 1  # m+1
@@ -88,11 +66,7 @@ def validate_bspline_params(
 
 
 def validate_surface_net(net: np.ndarray) -> np.ndarray:
-    """Ensure *net* is a 3-D array of shape (rows, cols, dim).
-
-    Raises:
-        ValueError: if the net is not rectangular or not 3-D coordinates.
-    """
+    """Net as a (rows, cols, 3) array, at least 2 x 2."""
     net = np.asarray(net, dtype=float)
     if net.ndim != 3:
         raise ValueError(
@@ -112,13 +86,7 @@ def validate_surface_net(net: np.ndarray) -> np.ndarray:
 
 
 def validate_weights(weights: Sequence[float], n_expected: int) -> np.ndarray:
-    """Check that *weights* is a 1-D array of positive values with length *n_expected*.
-
-    Returns a numpy array of floats.
-
-    Raises:
-        ValueError: on bad input.
-    """
+    """One positive weight per control point. Returns an array."""
     w = np.asarray(weights, dtype=float).ravel()
     if w.shape[0] != n_expected:
         raise ValueError(
@@ -133,13 +101,7 @@ def validate_weights(weights: Sequence[float], n_expected: int) -> np.ndarray:
 def validate_surface_weights(
     weights: Sequence[Sequence[float]], rows: int, cols: int
 ) -> np.ndarray:
-    """Check that *weights* is a 2-D array of shape (rows, cols) with positive values.
-
-    Returns a numpy array of shape (rows, cols).
-
-    Raises:
-        ValueError: on bad input.
-    """
+    """Positive weights with the same shape as the net."""
     w = np.asarray(weights, dtype=float)
     if w.ndim != 2 or w.shape[0] != rows or w.shape[1] != cols:
         raise ValueError(

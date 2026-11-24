@@ -1,0 +1,89 @@
+IGA DESIGNER - MATLAB VERIFICATION (SHORT SUMMARY)
+==================================================
+
+WHAT WAS DONE
+  The software's IGA Analysis results were calculated a second time with
+  separate MATLAB code that does not use any of the software's code. The two
+  sets of results were then compared number by number.
+  22 test shapes were checked, with 588 comparisons in total.
+  (Run in GNU Octave 11.3, a free MATLAB-compatible program. MATLAB was not
+  installed on this PC.)
+
+RESULT
+  All 588 comparisons MATCH. The largest difference is about 0.000000000000005
+  (5e-15), which is just computer rounding. So the software's results are
+  correct.
+  One small bug was found on the way, fixed, and checked again (see image 09
+  and image 12).
+
+
+WHAT WAS COMPARED (SOFTWARE vs MATLAB)
+  - Refined mesh       new knots and control points after splitting elements
+  - Shape              the shape must not change when the mesh is refined
+  - Surface points     x, y, z at many points
+  - Jacobian (J)       how much each element is stretched (used for mesh quality)
+  - Elements           how many there are, and which control points each one uses
+  - Boundaries         which control points lie on each edge
+  - Unknowns (DOFs)    number of unknowns a solver would have
+  - Gauss points       integration points inside each element
+  - Areas              area of every element and the total area
+  - Mesh quality       OK / Distorted / Inverted / Degenerate for every element
+  - MATLAB export      the .m file the software writes
+
+
+THE IMAGES  (folder comparison_images)
+  Each case has 3 pictures:  a = software,  b = MATLAB,  c = side by side
+  (the third panel of c shows the difference, which is close to zero everywhere)
+
+  No.  Case                                What it shows                    Result
+  ---  ----------------------------------  -------------------------------  ---------------------
+  01   Plate with a hole (2D, 32 elem.)    standard IGA test shape          MATCH (diff 1.5e-15)
+  02   Plate, extra knots inserted         non-uniform mesh refinement      MATCH (diff 2.1e-15)
+  03   Quarter ring (2D, 64 elem.)         curved (NURBS) shape, fine mesh  MATCH (diff 2.4e-15)
+  04   Cylinder (3D, 16 elem.)             3D curved surface                MATCH (diff 5.4e-16)
+  05   T-shape (3D, 40 elem.)              3D shape with sharp corners      MATCH (diff 7.1e-16)
+  06   Stretched elements                  quality check: "Distorted"       MATCH (same status)
+  07   Folded elements                     quality check: "Inverted"        MATCH (same status)
+  08   Quarter disk (edge -> point)        quality check: "Degenerate"      MATCH (same status)
+  09   Hidden fold                         the bug that was fixed           MATCH after the fix
+  10   Chart: all 22 cases                 largest difference of each check: all below 5e-15
+  11   Chart: area vs mesh size            software and MATLAB give the same area
+  12   Bug fix: before / after             see below
+
+  The software and MATLAB use different colour scales, so compare shapes and
+  numbers, not colours.
+
+
+THE BUG THAT WAS FOUND (images 09 and 12)
+  Problem : one folded element was labelled "Distorted" instead of "Inverted",
+            because the software only looked at a few points inside each element
+            and the fold was between them.
+  Fix     : the software now checks more points per element.
+  Check   : after the fix, the software and MATLAB both say "Inverted".
+
+
+SMALL DIFFERENCES THAT ARE NOT ERRORS
+  - The total area shown by the software can differ slightly from the exact
+    area, for example 15.2146018319 instead of 15.2146018366 for the plate.
+    This comes from the standard numerical integration that every IGA program
+    uses. MATLAB using the same method gives exactly the same number, and the
+    gap shrinks quickly as the mesh is refined (image 11).
+
+
+PROOF THAT THE CHECKING WORKS
+  Seven tiny mistakes were planted on purpose in copies of the results, for
+  example one point moved by 0.000001. MATLAB caught all 7.
+
+
+CONCLUSION
+  The software's isogeometric analysis results agree with an independent
+  MATLAB calculation for every tested shape and every result type. The one bug
+  found was fixed and re-checked. The results are correct.
+
+
+ABOUT THIS FOLDER
+  This folder keeps the 30 final images and this summary from the verification
+  run of 24 November 2026. The MATLAB scripts and the CSV tables of numbers
+  were removed afterwards to keep the project small, so the run cannot be
+  repeated from this folder. The bug fix is still checked by the project's
+  own tests (tests/test_iga.py, test_fold_between_gauss_points_is_inverted).

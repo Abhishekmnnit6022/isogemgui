@@ -34,13 +34,11 @@ REQUIRED_FIELDS = {
 }
 
 
-# Creates a list of default 1.0 weights
 def _make_weights(n: int) -> list[float]:
     """Returns a list of 1.0 weights, one for each control point."""
     return [1.0] * n
 
 
-# Save geometry dictionary to JSON file
 def save(path: str | Path, data: Dict[str, Any]) -> None:
     """Writes a geometry dictionary to a JSON file on disk. Converts numpy arrays to lists."""
     data = dict(data)
@@ -69,7 +67,6 @@ def save(path: str | Path, data: Dict[str, Any]) -> None:
         json.dump(data, f, indent=2)
 
 
-# Load geometry from JSON file and validate
 def load(path: str | Path) -> Dict[str, Any]:
     """Reads a JSON file, verifies its geometry properties, and returns verified numpy arrays."""
     try:
@@ -103,7 +100,6 @@ def load(path: str | Path) -> Dict[str, Any]:
     return data
 
 
-# Validate and normalise the fields of a loaded geometry dictionary in place
 def _validate_fields(geom_type: str, data: Dict[str, Any]) -> None:
     """Checks each field for the given geometry type and replaces it with a validated value."""
     if geom_type == "iga_analysis_model":

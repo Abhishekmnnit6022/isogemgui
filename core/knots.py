@@ -1,7 +1,4 @@
-"""Knot vector generators for B-spline curves.
-
-Provides functions for open/clamped, uniform, and periodic knot vectors.
-"""
+"""Knot vector generators."""
 
 from __future__ import annotations
 
@@ -9,21 +6,7 @@ from typing import List
 
 
 def open_uniform(n_control_points: int, degree: int) -> List[float]:
-    """Generate an open (clamped) uniform knot vector.
-
-    The first and last (degree+1) knots are clamped to 0 and 1 respectively.
-    Internal knots are uniformly spaced.
-
-    Args:
-        n_control_points: Number of control points (n+1).
-        degree: Polynomial degree p.
-
-    Returns:
-        Knot vector of length n_control_points + degree + 1.
-
-    Raises:
-        ValueError: if n_control_points < degree + 1.
-    """
+    """Clamped knots: p+1 zeros, evenly spaced inner knots, p+1 ones."""
     n = n_control_points
     p = degree
     if n < p + 1:
@@ -41,17 +24,6 @@ def open_uniform(n_control_points: int, degree: int) -> List[float]:
 
 
 def uniform(n_control_points: int, degree: int) -> List[float]:
-    """Generate a uniform, unclamped knot vector: 0, 1, 2, ..., n_control_points + degree.
-
-    The curve does not reach the first/last control point and is only defined
-    on knots[degree] .. knots[-degree-1] (see core.bspline.valid_domain).
-
-    Args:
-        n_control_points: Number of control points.
-        degree: Polynomial degree.
-
-    Returns:
-        Knot vector of length n_control_points + degree + 1.
-    """
+    """Unclamped knots 0, 1, 2, ... (curve only valid on knots[p]..knots[-p-1])."""
     total = n_control_points + degree + 1
     return [float(i) for i in range(total)]

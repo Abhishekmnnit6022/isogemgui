@@ -8,13 +8,11 @@ import numpy as np
 from .validation import validate_control_points, validate_surface_net
 
 
-# Calculate single Bernstein basis value B_{i,n}(u)
 def bernstein(i: int, n: int, u: np.ndarray) -> np.ndarray:
     """Calculates the i-th Bernstein polynomial of degree n for parameter array u."""
     return comb(n, i) * (u ** i) * ((1.0 - u) ** (n - i))
 
 
-# Calculate 2D or 3D Bezier curve points from control points
 def bezier_curve(
     control_points: np.ndarray,
     n_eval: int = 200,
@@ -35,7 +33,6 @@ def bezier_curve(
     return curve
 
 
-# Calculate 3D Bezier surface grid from a control net
 def bezier_surface(
     net: np.ndarray,
     u_eval: int = 30,

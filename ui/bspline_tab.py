@@ -249,7 +249,7 @@ class BsplineTab(QWidget):
         self._style_dialog.exec_()
         self._on_display_option_changed()
 
-    # Curve display options only matter while the curve is shown; never replace a basis plot
+    # Display options only redraw the curve, never a basis plot
     def _on_display_option_changed(self, *_):
         if self._last_plot == "curve":
             self._draw_curve(silent=True)
@@ -412,7 +412,7 @@ class BsplineTab(QWidget):
         for i in range(n_basis):
             ax.plot(t, basis[i], label=f"N_{i},{deg}")
 
-        # For unclamped knots, mark the range where the basis sums to 1 (where the curve lives)
+        # Unclamped knots: shade the range where the curve exists
         try:
             start, end = valid_domain(knots, deg)
             if (start, end) != (knots[0], knots[-1]):
@@ -518,7 +518,7 @@ class BsplineTab(QWidget):
         validate_bspline_params(knots, deg, cp.shape[0])
         return knots, deg, cp
 
-    # Replace the curve with a refined one, redraw, and report that the shape is unchanged
+    # Swap in the refined curve and report the shape change
     def _apply_refinement(self, old, new_knots, new_cp, action: str):
         knots, deg, cp = old
         u = np.linspace(*valid_domain(knots, deg), 400)
@@ -551,7 +551,6 @@ class BsplineTab(QWidget):
             return
         self._apply_refinement(old, new_knots, new_cp, "Split all elements")
 
-    # Export calculated basis function matrix to Excel spreadsheet
     def export_basis_excel(self, filepath: Optional[str] = None):
         """Export basis matrix over parameter t to an Excel workbook."""
         try:

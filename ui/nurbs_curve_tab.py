@@ -316,7 +316,6 @@ class NurbsCurveTab(QWidget):
         self._status(f"Rational basis plotted: {R.shape[0]} functions, degree {degree}  |  "
                      f"max |sum R_i - 1| = {np.max(np.abs(R.sum(axis=0) - 1.0)):.2e}")
 
-    # Export rational basis matrix to an Excel spreadsheet
     def export_rational_basis_excel(self, filepath: Optional[str] = None):
         """Export R_i(u) over the knot range to an Excel workbook (one column per function)."""
         try:
@@ -424,7 +423,7 @@ class NurbsCurveTab(QWidget):
         self._last_status = "  |  ".join(parts)
         self._status(self._last_status)
 
-    # Replace the curve with a refined one, redraw, and report that the shape is unchanged
+    # Swap in the refined curve and report the shape change
     def _apply_refinement(self, old, new_knots, new_cp, new_w, action: str):
         knots, degree, cp, w = old
         u = np.linspace(*valid_domain(knots, degree), 400)

@@ -1,14 +1,4 @@
-"""IGA analysis preparation for NURBS surfaces (no solver).
-
-Turns a NURBS surface into the data an isogeometric solver needs:
-elements (knot spans), element connectivity, degrees of freedom, boundary
-control-point sets, Gauss integration points and a mesh-quality check based on
-the Jacobian of the geometry map (u, v) -> (x, y, z). The model can be exported
-as JSON or as a MATLAB script in the NURBS-toolbox (nrbmak / GeoPDEs) layout.
-
-Control points are numbered row by row: index = i * n_cols + j, with i along u
-(rows of the net) and j along v (columns), 0-based here and 1-based in MATLAB.
-"""
+"""IGA analysis prep for a NURBS surface: elements, Jacobian, Gauss points, export."""
 
 from __future__ import annotations
 
@@ -39,19 +29,18 @@ MODEL_TYPE = "iga_analysis_model"
 # ---------------------------------------------------------------- geometry evaluation
 
 def surface_derivatives(ku, kv, du, dv, net, weights, u, v):
-    """Point S and first derivatives S_u, S_v of a NURBS surface on a (u, v) grid.
-
-    Returns three arrays of shape (len(u), len(v), 3).
-    """
+    """Surface points S and tangents S_u, S_v on a (u, v) grid."""
     net = np.asarray(net, dtype=float)
     w = np.asarray(weights, dtype=float)
     Nu, dNu = basis_function_derivatives(ku, du, u)
     Nv, dNv = basis_function_derivatives(kv, dv, v)
     Pw = net * w[:, :, np.newaxis]
 
+    # Tensor-product sums done as two matrix products (u first, then v): much faster
+    # than one 4-index einsum on large meshes, same result up to rounding.
     def combine(Bu, Bv):
-        A = np.einsum("ia,jb,ijk->abk", Bu, Bv, Pw)
-        W = np.einsum("ia,jb,ij->ab", Bu, Bv, w)
+        A = np.tensordot(np.tensordot(Bu, Pw, axes=(0, 0)), Bv, axes=(1, 0)).transpose(0, 2, 1)
+        W = Bu.T @ w @ Bv
         return A, W
 
     A, W = combine(Nu, Nv)
@@ -204,14 +193,20 @@ class AnalysisModel:
         }
 
 
-# Parameter samples inside one element: endpoints nudged inwards so derivatives
-# are taken from this element's own span, plus the Gauss nodes.
-def _element_samples(a: float, b: float, nodes: np.ndarray, with_ends: bool) -> np.ndarray:
+# Even quality samples per element side (odd, so the midpoint is included).
+# Corners + Gauss points alone missed a fold between them.
+def quality_samples(degree: int) -> int:
+    return max(2 * int(degree) + 3, 7)
+
+
+# Samples in one element: Gauss nodes first, then n_uniform even points
+# (ends moved in a tiny bit so we stay inside this element).
+def _element_samples(a: float, b: float, nodes: np.ndarray, n_uniform: int = 0) -> np.ndarray:
     mid, half = (a + b) / 2.0, (b - a) / 2.0
     pts = mid + half * nodes
-    if with_ends:
+    if n_uniform:
         eps = 1e-9 * (b - a)
-        pts = np.concatenate([[a + eps], pts, [b - eps]])
+        pts = np.concatenate([pts, np.linspace(a + eps, b - eps, int(n_uniform))])
     return pts
 
 
@@ -228,10 +223,8 @@ def analyze_surface(
 ) -> AnalysisModel:
     """Build the analysis model of a NURBS surface.
 
-    Gauss points default to degree + 1 per direction (what a standard IGA solver uses).
-    Element areas, the total area and the Jacobian range are computed with them;
-    the quality check also looks at the element corners.
-    """
+    Uses p+1 Gauss points per direction for the areas. Quality is checked on the
+    Gauss points plus an even grid that includes the element corners and edges."""
     ku, kv = validate_knots(knots_u), validate_knots(knots_v)
     du, dv = validate_degree(degree_u), validate_degree(degree_v)
     net = validate_surface_net(net)
@@ -250,10 +243,11 @@ def analyze_surface(
     neu, nev = len(bu) - 1, len(bv) - 1
     planar = is_planar(net)
 
-    # One evaluation on the full tensor grid: per element (corner, gauss..., corner)
-    mu, mv = gu + 2, gv + 2
-    U = np.concatenate([_element_samples(bu[a], bu[a + 1], xu, True) for a in range(neu)])
-    V = np.concatenate([_element_samples(bv[b], bv[b + 1], xv, True) for b in range(nev)])
+    # Evaluate all samples of all elements in one go
+    qu, qv = quality_samples(du), quality_samples(dv)
+    mu, mv = gu + qu, gv + qv
+    U = np.concatenate([_element_samples(bu[a], bu[a + 1], xu, qu) for a in range(neu)])
+    V = np.concatenate([_element_samples(bv[b], bv[b + 1], xv, qv) for b in range(nev)])
     S, Su, Sv = surface_derivatives(ku, kv, du, dv, net, w, U, V)
     J = jacobian(Su, Sv, planar)
     j_scale = float(np.max(np.abs(J))) or 1.0
@@ -267,12 +261,12 @@ def analyze_surface(
     for a in range(neu):
         for b in range(nev):
             block = J[a * mu:(a + 1) * mu, b * mv:(b + 1) * mv]
-            jg = block[1:-1, 1:-1]                        # Gauss points only
+            jg = block[:gu, :gv]                          # Gauss points only
             hu = (bu[a + 1] - bu[a]) / 2.0
             hv = (bv[b + 1] - bv[b]) / 2.0
             area = float(np.sum(np.outer(wu, wv) * np.abs(jg)) * hu * hv)
             total += area
-            gauss_pts.append(S[a * mu + 1:(a + 1) * mu - 1, b * mv + 1:(b + 1) * mv - 1].reshape(-1, 3))
+            gauss_pts.append(S[a * mu:a * mu + gu, b * mv:b * mv + gv].reshape(-1, 3))
 
             jmin, jmax = float(block.min()), float(block.max())
             amin = float(np.min(np.abs(block)))
@@ -318,15 +312,11 @@ def analyze_surface(
 
 
 def jacobian_field(model: AnalysisModel, per_element: int = 8):
-    """Points and Jacobian values on a fine grid for colouring the plot.
-
-    Samples stay strictly inside each element so values next to C0 knots are
-    taken from the correct side. Returns (X, Y, Z, J) as 2D arrays.
-    """
+    """Jacobian on a fine grid inside each element, for colouring the plot."""
     nodes = np.linspace(-1.0, 1.0, max(int(per_element), 2))
-    U = np.concatenate([_element_samples(model.bounds_u[a], model.bounds_u[a + 1], nodes * (1 - 1e-9), False)
+    U = np.concatenate([_element_samples(model.bounds_u[a], model.bounds_u[a + 1], nodes * (1 - 1e-9))
                         for a in range(model.n_elements_u)])
-    V = np.concatenate([_element_samples(model.bounds_v[b], model.bounds_v[b + 1], nodes * (1 - 1e-9), False)
+    V = np.concatenate([_element_samples(model.bounds_v[b], model.bounds_v[b + 1], nodes * (1 - 1e-9))
                         for b in range(model.n_elements_v)])
     S, Su, Sv = surface_derivatives(model.knots_u, model.knots_v, model.degree_u, model.degree_v,
                                     model.net, model.weights, U, V)
@@ -353,12 +343,7 @@ def _m_str(text: str) -> str:
 
 
 def export_matlab(model: AnalysisModel, path) -> None:
-    """Write a MATLAB / Octave script that recreates the model.
-
-    `geometry` follows the NURBS toolbox structure made by nrbmak (used by GeoPDEs):
-    coefs is 4 x n_u x n_v with weighted coordinates [w*x; w*y; w*z; w].
-    Connectivity and boundary sets are 1-based.
-    """
+    """Write the model as a MATLAB/Octave script (NURBS toolbox layout, 1-based)."""
     rows, cols = model.n_rows, model.n_cols
     coefs = np.empty((4, rows, cols))
     coefs[:3] = np.moveaxis(model.net * model.weights[:, :, np.newaxis], 2, 0)
@@ -411,11 +396,7 @@ def export_matlab(model: AnalysisModel, path) -> None:
 # ---------------------------------------------------------------- plotting data
 
 def element_mesh_lines(ku, kv, du, dv, net, weights, samples: int = 60) -> List[np.ndarray]:
-    """Iso-parameter curves along every element boundary (the IGA mesh lines).
-
-    Returns a list of (n, 3) point arrays: one curve per distinct u-knot (running
-    over v) and one per distinct v-knot (running over u), outer edges included.
-    """
+    """Curves along every element boundary, for drawing the mesh."""
     from .nurbs import nurbs_surface, sample_parameters
     bu, bv = element_boundaries(ku, du), element_boundaries(kv, dv)
     su = sample_parameters(ku, samples, du)

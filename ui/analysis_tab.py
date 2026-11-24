@@ -1,13 +1,6 @@
-"""IGA Analysis tab: prepare a NURBS surface for isogeometric analysis (no solver).
+"""IGA Analysis tab: load a NURBS surface, refine it, set edge conditions and export.
 
-The left panel walks through five numbered steps:
-  1. Geometry      - take the NURBS Surface tab's surface, open a file, or load an example
-  2. Refinement    - split elements / insert knots (the shape never changes)
-  3. Boundaries    - tag each of the four edges (fixed, load, ...)
-  4. Display       - mesh, Jacobian colours, control net, Gauss points, numbers
-  5. Export        - JSON (reopens here) or MATLAB script (NURBS toolbox / GeoPDEs layout)
-The right side shows the plot and the results (Summary and Elements tables).
-"""
+Five steps on the left, plot and results on the right. No solver."""
 
 from __future__ import annotations
 

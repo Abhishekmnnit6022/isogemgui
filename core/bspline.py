@@ -13,12 +13,8 @@ from .validation import (
 )
 
 
-# Recursive Cox-de Boor function for a single parameter value u (kept as the reference)
 def _basis_scalar(i: int, p: int, u: float, knots: List[float]) -> float:
-    """Computes the basis function N_{i,p}(u) at a single number u.
-    Zero division is treated as zero.
-    The last knot span includes the right endpoint so clamped curves reach the final control point.
-    """
+    """N_{i,p}(u) for one u by plain recursion. Kept as a reference for the tests."""
     if p == 0:
         if knots[i] == knots[i + 1]:
             return 0.0
@@ -38,16 +34,11 @@ def _basis_scalar(i: int, p: int, u: float, knots: List[float]) -> float:
     return c1 * _basis_scalar(i, p - 1, u, knots) + c2 * _basis_scalar(i + 1, p - 1, u, knots)
 
 
-# All basis functions N_{i,p} at many parameter values at once (same recurrence, vectorised)
 def basis_functions(knots: Sequence[float], degree: int, u: Sequence[float]) -> np.ndarray:
-    """Evaluates every B-spline basis function N_{i,p}(u) for an array of parameters.
+    """All basis functions N_{i,p} at many u values at once.
 
-    Uses the Cox-de Boor recurrence bottom-up (degree 0, 1, ..., p) on whole arrays,
-    with exactly the same rules as _basis_scalar (0/0 = 0, right end point included).
-
-    Returns:
-        Array of shape (len(knots) - degree - 1, len(u)).
-    """
+    Same Cox-de Boor rule as _basis_scalar, built up degree by degree.
+    Returns an array of shape (number of functions, len(u))."""
     k = np.asarray(validate_knots(knots), dtype=float)
     p = validate_degree(degree)
     u = np.atleast_1d(np.asarray(u, dtype=float))
@@ -84,14 +75,8 @@ def basis_functions(knots: Sequence[float], degree: int, u: Sequence[float]) -> 
     return N
 
 
-# Parameter range on which the basis functions add up to 1
 def valid_domain(knots: Sequence[float], degree: int) -> Tuple[float, float]:
-    """Returns (u_start, u_end) = (knots[p], knots[-p-1]), where the curve is defined.
-
-    For clamped (open) knot vectors this is the whole knot range. For unclamped
-    knots (for example uniform 0, 1, 2, ...) the first and last p spans are not
-    covered by a full set of basis functions, so a curve must not be drawn there.
-    """
+    """(knots[p], knots[-p-1]): the range where the curve is defined."""
     k = validate_knots(knots)
     p = validate_degree(degree)
     if len(k) < 2 * p + 2:
@@ -107,16 +92,12 @@ def valid_domain(knots: Sequence[float], degree: int) -> Tuple[float, float]:
     return start, end
 
 
-# Generate the full basis function matrix across parameter array t
 def basis_matrix(
     knots: Sequence[float],
     degree: int,
     n_eval: int = 200,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Calculates all B-spline basis functions over an evenly spaced range of u values
-    covering the whole knot vector (so the plot shows every function completely).
-    Returns (basis_matrix, parameter_array).
-    """
+    """Basis functions over the whole knot range, for plots and Excel."""
     knots_list = validate_knots(knots)
     degree = validate_degree(degree)
     n_basis = len(knots_list) - degree - 1
@@ -130,7 +111,6 @@ def basis_matrix(
     return basis_functions(knots_list, degree, t), t
 
 
-# Calculate 2D or 3D B-spline curve points from knots and control points
 def bspline_curve(
     knots: Sequence[float],
     degree: int,
@@ -138,11 +118,7 @@ def bspline_curve(
     n_eval: int = 200,
     u_values: Optional[Sequence[float]] = None,
 ) -> np.ndarray:
-    """Calculates points along the B-spline curve by multiplying basis functions with control points.
-
-    The curve is sampled on its valid range [knots[p], knots[-p-1]] (the whole range for
-    clamped knots). Pass u_values to evaluate at chosen parameters instead.
-    """
+    """Points on a B-spline curve (2D or 3D)."""
     knots_list = validate_knots(knots)
     degree = validate_degree(degree)
     cp = validate_control_points(control_points)
@@ -157,16 +133,10 @@ def bspline_curve(
     return N.T @ cp
 
 
-# Basis functions and their first derivatives dN_{i,p}/du at many parameters
 def basis_function_derivatives(
     knots: Sequence[float], degree: int, u: Sequence[float]
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Returns (N, dN), both of shape (len(knots) - degree - 1, len(u)).
-
-    Uses the standard formula
-        dN_{i,p}/du = p * ( N_{i,p-1} / (u_{i+p} - u_i) - N_{i+1,p-1} / (u_{i+p+1} - u_{i+1}) )
-    with 0/0 treated as 0. At a knot the right-hand span is used, like basis_functions().
-    """
+    """Basis functions N and their first derivatives dN/du."""
     k = np.asarray(validate_knots(knots), dtype=float)
     p = validate_degree(degree)
     u = np.atleast_1d(np.asarray(u, dtype=float))
@@ -185,13 +155,8 @@ def basis_function_derivatives(
     return N, dN
 
 
-# Distinct knot values inside the valid range: the element (knot span) boundaries
 def element_boundaries(knots: Sequence[float], degree: int) -> np.ndarray:
-    """Sorted distinct knots in [knots[p], knots[-p-1]].
-
-    Consecutive values bound one element (a non-empty knot span), so the number
-    of elements is len(result) - 1.
-    """
+    """Distinct knots inside the valid range (the ends of each element)."""
     start, end = valid_domain(knots, degree)
     k = np.asarray(validate_knots(knots), dtype=float)
     return np.unique(k[(k >= start) & (k <= end)])

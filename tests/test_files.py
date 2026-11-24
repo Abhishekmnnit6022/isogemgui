@@ -1,14 +1,66 @@
-"""Tests for JSON save/load serialization."""
+"""File tests: saving and opening geometry as JSON."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
+
 import numpy as np
 import pytest
+from PyQt5.QtWidgets import QFileDialog
 
 from core import io_json
+from core.knots import open_uniform
+from core.nurbs import nurbs_t_shape
 
+
+# ---------------- Fixed bugs: files the tabs cannot show
+
+def _open(window, tmp_path, monkeypatch, payload):
+    from PyQt5.QtWidgets import QFileDialog
+    path = tmp_path / "geom.json"
+    path.write_text(json.dumps(payload))
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(lambda *a: (str(path), "")))
+    window._file_open()
+
+
+def test_bezier_surface_up_to_50x50_loads(window, tmp_path, monkeypatch, dialogs):
+    net = np.random.default_rng(1).random((25, 3, 3))
+    _open(window, tmp_path, monkeypatch, {"type": "bezier_surface", "control_points": net.tolist()})
+    assert dialogs == []
+    np.testing.assert_array_equal(window._surface_tab.get_control_net(), net)
+
+
+@pytest.mark.parametrize("payload, message", [
+    ({"type": "bspline_curve", "degree": 16, "knots": open_uniform(20, 16),
+      "control_points": np.ones((20, 2)).tolist()},
+     "Degree 16 is outside the supported range 1 to 15."),
+    ({"type": "bspline_curve", "degree": 0, "knots": [0, 1, 2, 3],
+      "control_points": [[0, 0], [1, 1], [2, 0]]},
+     "Degree 0 is outside the supported range 1 to 15."),
+    ({"type": "nurbs_curve", "degree": 0, "knots": [0, 1, 2, 3],
+      "control_points": [[0, 0], [1, 1], [2, 0]], "weights": [1, 1, 1]},
+     "Degree 0 is outside the supported range 1 to 15."),
+    ({"type": "nurbs_surface", "degree_u": 1, "degree_v": 0, "knots_u": [0, 0, 1, 1],
+      "knots_v": [0, 1, 2], "control_points": np.zeros((2, 2, 3)).tolist(),
+      "weights": [[1, 1], [1, 1]]},
+     "Degree V 0 is outside the supported range 1 to 15."),
+    ({"type": "bezier_surface", "control_points": np.zeros((60, 2, 3)).tolist()},
+     "Number of control net rows 60 is outside the supported range 2 to 50."),
+])
+def test_out_of_range_files_are_rejected_clearly(window, tmp_path, monkeypatch, dialogs,
+                                                 payload, message):
+    before = {name: getattr(window, name).get_data() for name in
+              ("_bspline_tab", "_surface_tab")}
+    _open(window, tmp_path, monkeypatch, payload)
+    assert dialogs[-1][0] == "critical"
+    assert message in dialogs[-1][2]
+    # The tabs that could be affected keep their previous content
+    for name, data in before.items():
+        assert getattr(window, name).get_data() == data
+
+
+# ---------------- JSON save and load
 
 def test_bezier_curve_roundtrip(tmp_path: Path):
     """Save and load a Bezier curve; verify identical data."""
@@ -144,7 +196,6 @@ def test_nurbs_examples_load():
         assert data["type"] in ("nurbs_curve", "nurbs_surface")
         assert "control_points" in data
         assert "weights" in data
-
 
 
 def test_every_example_file_loads():

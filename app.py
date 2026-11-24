@@ -1,8 +1,4 @@
-"""Main window of IGA Designer: six tabs, the File/Help menus and the status bar.
-
-Each tab offers get_data() / set_data() so File -> Open / Save As work the same way
-everywhere; File -> Open picks the tab from the "type" field of the JSON file.
-"""
+"""Main window: six tabs, File/Help menus and the status bar."""
 
 from __future__ import annotations
 

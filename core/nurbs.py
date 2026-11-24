@@ -1,8 +1,4 @@
-"""NURBS (Non-Uniform Rational B-Spline) curve and surface evaluation.
-
-Reuses the Cox-de Boor basis from core.bspline and adds rational
-weighting on top.
-"""
+"""NURBS curves and surfaces, plus the built-in example shapes."""
 
 from __future__ import annotations
 
@@ -31,19 +27,7 @@ def rational_basis_matrix(
     weights: Sequence[float],
     n_eval: int = 200,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Compute the NURBS rational basis functions R_i(u).
-
-    R_i(u) = N_i(u) * w_i / sum_j N_j(u) * w_j
-
-    Args:
-        knots: Knot vector (non-decreasing).
-        degree: Polynomial degree.
-        weights: One positive weight per basis function.
-        n_eval: Number of evenly spaced evaluation points.
-
-    Returns:
-        (u, R) where u has shape (n_eval,) and R has shape (n_basis, n_eval).
-    """
+    """Rational basis R_i(u) = N_i w_i / sum(N_j w_j). Returns (u, R)."""
     knots_list = validate_knots(knots)
     degree = validate_degree(degree)
     n_basis = len(knots_list) - degree - 1
@@ -73,22 +57,7 @@ def nurbs_curve(
     n_eval: int = 200,
     u_values: Sequence[float] | None = None,
 ) -> np.ndarray:
-    """Evaluate a NURBS curve.
-
-    C(u) = sum_i R_i(u) * P_i
-
-    Args:
-        knots: Knot vector.
-        degree: Polynomial degree.
-        control_points: Shape (n, 2) or (n, 3).
-        weights: One positive weight per control point.
-        n_eval: Number of evaluation points.
-        u_values: Optional explicit parameter values (overrides n_eval),
-            e.g. from sample_parameters() so sharp corners at knots are hit exactly.
-
-    Returns:
-        Curve points, shape (len(u), dim).
-    """
+    """Points on a NURBS curve. Pass u_values to choose the parameters yourself."""
     knots_list = validate_knots(knots)
     degree = validate_degree(degree)
     cp = validate_control_points(control_points)
@@ -119,25 +88,7 @@ def nurbs_surface(
     u_values: Sequence[float] | None = None,
     v_values: Sequence[float] | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Evaluate a NURBS surface.
-
-    S(u,v) = sum_ij R_ij(u,v) * P_ij
-    R_ij   = N_i(u) * N_j(v) * w_ij / sum_kl N_k(u) * N_l(v) * w_kl
-
-    Args:
-        knots_u: Knot vector in the u-direction.
-        knots_v: Knot vector in the v-direction.
-        degree_u: Degree in the u-direction.
-        degree_v: Degree in the v-direction.
-        net: Control point net, shape (rows, cols, 3).
-        weights: Weight net, shape (rows, cols).
-        n_eval_u: Evaluation points along u.
-        n_eval_v: Evaluation points along v.
-        u_values, v_values: Optional explicit parameter values (override n_eval_u / n_eval_v).
-
-    Returns:
-        (X, Y, Z) grids, each shape (len(u), len(v)).
-    """
+    """Points on a NURBS surface. Returns the X, Y, Z grids."""
     ku = validate_knots(knots_u)
     kv = validate_knots(knots_v)
     du = validate_degree(degree_u)
@@ -157,7 +108,7 @@ def nurbs_surface(
     Nu = basis_functions(ku, du, u_arr).T
     Nv = basis_functions(kv, dv, v_arr).T
 
-    # Weighted tensor-product sums: denom = sum_ij Nu_i Nv_j w_ij, numer = same times P_ij
+    # Weighted sums over the net: denominator and numerator
     denom = np.einsum("ai,bj,ij->ab", Nu, Nv, w)
     numer = np.einsum("ai,bj,ij,ijk->abk", Nu, Nv, w, net)
     safe = np.where(denom == 0.0, 1.0, denom)
@@ -176,15 +127,7 @@ def nurbs_circle(
     radius: float = 1.0,
     center: Tuple[float, float] = (0.0, 0.0),
 ) -> Tuple[np.ndarray, np.ndarray, List[float], int]:
-    """Generate the standard 9-point exact NURBS circle (degree 2).
-
-    Returns:
-        (control_points, weights, knots, degree)
-        control_points: shape (9, 2)
-        weights: shape (9,)
-        knots: list of 12 floats
-        degree: 2
-    """
+    """Exact circle: 9 points, degree 2. Returns (points, weights, knots, degree)."""
     w1 = math.sqrt(2.0) / 2.0
     cx, cy = center
     r = radius
@@ -225,19 +168,7 @@ def nurbs_cylinder(
     radius: float = 1.0,
     height: float = 1.0,
 ) -> Tuple[np.ndarray, np.ndarray, List[float], List[float], int, int]:
-    """Generate a NURBS cylinder by extruding a circle along z.
-
-    Degree 2 in the u-direction (around), degree 1 in the v-direction (height).
-
-    Returns:
-        (net, weights, knots_u, knots_v, degree_u, degree_v)
-        net: shape (9, 2, 3)
-        weights: shape (9, 2)
-        knots_u: circle knot vector (12 knots)
-        knots_v: [0, 0, 1, 1]
-        degree_u: 2
-        degree_v: 1
-    """
+    """Cylinder made by extruding the exact circle along z."""
     if not float(radius) > 0.0:
         raise ValueError(f"Cylinder radius must be positive, got {radius}.")
     cp2d, w1d, knots_u, degree_u = nurbs_circle(radius=radius)
@@ -253,16 +184,7 @@ def extrude_curve(
     degree: int,
     height: float = 1.0,
 ) -> Tuple[np.ndarray, np.ndarray, List[float], List[float], int, int]:
-    """Sweep a 2D NURBS curve straight up along z from z = 0 to z = height.
-
-    The curve becomes the u-direction; the v-direction is linear (degree 1,
-    knots [0, 0, 1, 1]) with one row of control points at the bottom and one
-    at the top, both carrying the curve weights.
-
-    Returns:
-        (net, weights, knots_u, knots_v, degree_u, degree_v)
-        net: shape (n, 2, 3); weights: shape (n, 2).
-    """
+    """Sweep a 2D NURBS curve up along z into a surface (linear in v)."""
     cp = validate_control_points(control_points)
     if cp.shape[1] != 2:
         raise ValueError("Only 2D curves (x, y) can be extruded along z.")
@@ -293,19 +215,10 @@ def t_profile(
     stem_height: float = 3.0,
     fillet_radius: float = 0.4,
 ) -> Tuple[np.ndarray, np.ndarray, List[float], int]:
-    """Closed 2D outline of a T section as a degree-2 NURBS curve.
+    """Closed T outline as a degree-2 NURBS curve.
 
-    The stem runs from y = 0 to y = stem_height and the flange (the top bar)
-    sits on it from y = stem_height to y = stem_height + flange_thickness. The
-    shape is centred on x = 0. The two inner corners where the stem meets the
-    flange are rounded with exact quarter-circle arcs (middle weight sqrt(2)/2);
-    every other corner is sharp. Each straight edge or arc is one rational
-    quadratic Bezier piece, joined by double knots, so corners are exact.
-    Set fillet_radius = 0 for a T with all-sharp corners.
-
-    Returns:
-        (control_points, weights, knots, degree) with control_points shape (n, 2).
-    """
+    Each edge and each rounded inner corner is one piece, joined by double
+    knots, so corners stay sharp and the fillets are exact arcs."""
     W, tf = float(flange_width), float(flange_thickness)
     ws, hs, rf = float(stem_width), float(stem_height), float(fillet_radius)
     for name, val in (("flange_width", W), ("flange_thickness", tf),
@@ -371,12 +284,7 @@ def nurbs_t_shape(
     fillet_radius: float = 0.4,
     depth: float = 1.0,
 ) -> Tuple[np.ndarray, np.ndarray, List[float], List[float], int, int]:
-    """3D T-shaped NURBS surface: the T outline from t_profile() extruded along z.
-
-    Returns:
-        (net, weights, knots_u, knots_v, degree_u, degree_v)
-        net: shape (n, 2, 3) with n = 21 control points (17 without fillets).
-    """
+    """3D T-shape: the T outline extruded along z."""
     cp, w, knots, degree = t_profile(flange_width, flange_thickness, stem_width,
                                      stem_height, fillet_radius)
     return extrude_curve(cp, w, knots, degree, depth)
@@ -386,13 +294,7 @@ def nurbs_t_shape(
 
 def sample_parameters(knots: Sequence[float], n_eval: int = 200,
                       degree: int | None = None) -> np.ndarray:
-    """Evenly spaced parameters merged with every distinct knot inside the range.
-
-    Sharp corners of a curve (repeated knots) sit exactly at knot values, so
-    including the knots makes plots show corners exactly instead of cutting them.
-    With a degree, only the valid range [knots[p], knots[-p-1]] is sampled
-    (needed for unclamped knots); without one, the whole knot range is used.
-    """
+    """Even parameter samples plus every knot, so sharp corners are drawn exactly."""
     k = validate_knots(knots)
     start, end = (k[0], k[-1]) if degree is None else valid_domain(k, degree)
     base = np.linspace(start, end, max(int(n_eval), 2))
@@ -404,12 +306,7 @@ def sample_parameters(knots: Sequence[float], n_eval: int = 200,
 # Exact circle check for evaluated 2D points
 
 def fit_circle(points: np.ndarray) -> Tuple[float, float, float, float]:
-    """Least-squares circle through 2D points.
-
-    Returns (cx, cy, radius, max_radius_error), where max_radius_error is
-    max | |p - c| - radius | over all points. Raises ValueError if the points
-    are (nearly) collinear, so no finite circle fits them.
-    """
+    """Least-squares circle through 2D points: (cx, cy, radius, max radius error)."""
     pts = np.asarray(points, dtype=float)
     if pts.ndim != 2 or pts.shape[1] < 2 or pts.shape[0] < 3:
         raise ValueError("Need at least 3 two-dimensional points to fit a circle.")
@@ -439,14 +336,7 @@ def quarter_annulus(
     inner_radius: float = 1.0,
     outer_radius: float = 2.0,
 ) -> Tuple[np.ndarray, np.ndarray, List[float], List[float], int, int]:
-    """Planar quarter ring (z = 0) between two exact quarter circles, first quadrant.
-
-    u runs radially from the inner to the outer circle (degree 1), v runs around
-    the arc from the x-axis to the y-axis (degree 2). One element; positive Jacobian.
-
-    Returns:
-        (net, weights, knots_u, knots_v, degree_u, degree_v); net shape (2, 3, 3).
-    """
+    """Flat quarter ring between two exact arcs (IGA test shape)."""
     r1, r2 = float(inner_radius), float(outer_radius)
     if not 0.0 < r1 < r2:
         raise ValueError(
@@ -465,17 +355,7 @@ def plate_with_hole(
     radius: float = 1.0,
     length: float = 4.0,
 ) -> Tuple[np.ndarray, np.ndarray, List[float], List[float], int, int]:
-    """Planar quarter of a square plate with a circular hole (classic IGA benchmark).
-
-    The plate is [-length, 0] x [0, length] with a hole of the given radius at the
-    origin. u runs along the hole from (-radius, 0) to (0, radius) (degree 2, two
-    45-degree arcs joined at u = 0.5, matched on the outside by the plate corner
-    (-length, length)); v runs straight out from the hole to the plate edge (degree 1).
-    Two elements; positive Jacobian.
-
-    Returns:
-        (net, weights, knots_u, knots_v, degree_u, degree_v); net shape (5, 2, 3).
-    """
+    """Quarter of a square plate with a round hole (classic IGA test shape)."""
     R, L = float(radius), float(length)
     if not 0.0 < R < L:
         raise ValueError(f"Plate with hole needs 0 < radius < length, got {R} and {L}.")

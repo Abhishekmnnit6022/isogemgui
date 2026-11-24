@@ -308,7 +308,7 @@ class NurbsSurfaceTab(QWidget):
                     table.setItem(idx, 2 + c, QTableWidgetItem(text))
                 idx += 1
 
-    # Rebuild coordinate and weight tables to match the grid size, keeping existing values
+    # Resize both tables to the grid, keeping existing values
     def _resize_table(self, *_):
         nu = self._rows_spin.value()
         nv = self._cols_spin.value()
@@ -475,7 +475,7 @@ class NurbsSurfaceTab(QWidget):
         dv = data.get("degree_v", 1)
         self._set_net_and_weights(net, w, ku, kv, du, dv)
 
-    # Draw the NURBS surface; silent=True skips error dialogs (used for display-option redraws)
+    # Draw the surface; silent=True hides error pop-ups
     def _draw(self, silent: bool = False):
         try:
             net, w, ku, kv, du, dv = self._read_inputs()

@@ -13,11 +13,7 @@ MAX_KNOT_LABELS = 30  # above this many knots, markers are drawn without text la
 
 
 class CurveRefinementBox(QGroupBox):
-    """'Refinement (Knot Insertion)' group: insert one knot value or split every element.
-
-    on_insert() and on_split() are called when the buttons are pressed; the
-    owning tab reads the value with read_insert().
-    """
+    """'Refinement (Knot Insertion)' box: insert one knot or split every element."""
 
     def __init__(self, on_insert: Callable[[], None], on_split: Callable[[], None]):
         super().__init__("Refinement (Knot Insertion)")
@@ -60,10 +56,7 @@ class CurveRefinementBox(QGroupBox):
 
 
 def draw_knot_markers(ax, points: np.ndarray, values: np.ndarray, three_d: bool) -> None:
-    """Black square markers at the curve points that belong to each distinct knot.
-
-    Each marker is labelled with its u value (unless there are very many knots).
-    """
+    """Square markers where each knot sits on the curve, labelled with u."""
     pts = np.asarray(points, dtype=float)
     if three_d:
         ax.plot(pts[:, 0], pts[:, 1], pts[:, 2], linestyle="None", marker="s",
